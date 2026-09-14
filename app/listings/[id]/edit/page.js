@@ -341,7 +341,7 @@ export default function EditListingPage() {
           </div>
         </section>
 
-        {/* ƏMLAK PARAMETRLƏRİ */}
+        {/* ƏMLAK PARAMETrlƏRİ */}
         <section className="card-surface p-6 sm:p-8 bg-white rounded-2xl shadow-card border border-navy/10 space-y-4">
           <h2 className="text-lg font-bold text-navy border-b pb-3">Əmlakın Parametrləri</h2>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
