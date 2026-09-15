@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { useApp } from "@/context/AppContext";
 import { languages } from "@/lib/i18n";
-import { FiHeart, FiUser, FiShield, FiPlusCircle, FiGlobe, FiMapPin } from "react-icons/fi";
+import { FiHeart, FiUser, FiShield, FiPlusCircle, FiGlobe, FiMapPin, FiAward } from "react-icons/fi";
 
 export default function Navbar() {
   const { user, language, setLanguage, dict } = useApp();
@@ -38,7 +38,7 @@ export default function Navbar() {
         </Link>
 
         {/* Navigation Links */}
-        <nav className="hidden md:flex items-center gap-7 font-medium">
+        <nav className="hidden md:flex items-center gap-6 font-medium text-sm">
           <Link href="/listings" className="text-navy hover:text-copper transition">
             {dict.nav?.listings || "Elanlar"}
           </Link>
@@ -46,6 +46,11 @@ export default function Navbar() {
           {/* Xəritə Axtarışı Keçidi */}
           <Link href="/map" className="flex items-center gap-1.5 text-navy hover:text-copper transition">
             <FiMapPin className="text-copper" /> Xəritə Axtarışı
+          </Link>
+
+          {/* Rieltorlar / Top 50 Keçidi */}
+          <Link href="/realtors" className="flex items-center gap-1.5 text-navy hover:text-copper transition">
+            <FiAward className="text-copper" /> Rieltorlar
           </Link>
 
           <Link href="/favorites" className="flex items-center gap-1.5 text-navy hover:text-copper transition">

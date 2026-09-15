@@ -3,25 +3,23 @@
 import { useState } from "react";
 import { FiUpload, FiX } from "react-icons/fi";
 
-export default function MediaUploader({ images, setImages }) {
+export default function MediaUploader({ images = [], setImages }) {
   const [uploading, setUploading] = useState(false);
 
-  // Şəkil yükləmə simulyasiyası və ya birbaşa URL / Supabase Storage əlavəsi
   const handleFileChange = (e) => {
     const files = Array.from(e.target.files);
-    // Sadəlik üçün fayl adlarını və ya obyekt URL-lərini state-ə yığırıq
     const newImages = files.map((file) => URL.createObjectURL(file));
-    setImages((prev) => [...prev, ...newImages]);
+    setImages((prev) => [...(prev || []), ...newImages]);
   };
 
   const removeImage = (index) => {
-    setImages((prev) => prev.filter((_, i) => i !== index));
+    setImages((prev) => (prev || []).filter((_, i) => i !== index));
   };
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-4">
-        {images.map((img, index) => (
+        {(images || []).map((img, index) => (
           <div key={index} className="relative w-24 h-24 rounded-xl overflow-hidden border border-navy/10 shadow-sm">
             <img src={img} alt="Uploaded" className="w-full h-full object-cover" />
             <button
