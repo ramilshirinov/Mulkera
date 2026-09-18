@@ -15,13 +15,12 @@ const LocationPicker = dynamic(() => import("@/components/LocationPicker"), {
 
 const DOCUMENT_OPTIONS = ["Çıxarış", "Kupça", "Texniki pasport", "Notarial müqavilə", "Digər"];
 
+// Diqqət: title_ru / title_en / description_ru / description_en sahələri silindi.
+// Yalnız Azərbaycan dili saxlanılır. Baza sxemində bu sütunlar hələ də varsa,
+// göndərilərkən avtomatik olaraq null kimi ötürülür (aşağıda payload-a bax).
 const emptyForm = {
   title_az: "",
-  title_ru: "",
-  title_en: "",
   description_az: "",
-  description_ru: "",
-  description_en: "",
   category_id: "",
   district_id: "",
   transaction_type: "sale",
@@ -101,11 +100,11 @@ export default function AddListingPage() {
         owner_id: user.id,
         owner_type: profile?.role === "realtor" ? "agency" : "owner",
         title_az: form.title_az,
-        title_ru: form.title_ru || null,
-        title_en: form.title_en || null,
+        title_ru: null,
+        title_en: null,
         description_az: form.description_az,
-        description_ru: form.description_ru || null,
-        description_en: form.description_en || null,
+        description_ru: null,
+        description_en: null,
         category_id: Number(form.category_id),
         district_id: Number(form.district_id),
         transaction_type: form.transaction_type,
@@ -135,7 +134,7 @@ export default function AddListingPage() {
     } catch (err) {
       console.error(err);
       if (err.fieldErrors) setErrors(err.fieldErrors);
-      alert("Xəta baş verdi: " + (err.message || "Namعلوم xəta"));
+      alert("Xəta baş verdi: " + (err.message || "Naməlum xəta"));
     } finally {
       setSubmitting(false);
     }
@@ -164,7 +163,7 @@ export default function AddListingPage() {
           <h2 className="text-lg font-bold text-navy border-b pb-3">Əsas Məlumatlar</h2>
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-semibold text-navy mb-2">Elanın Başlığı (AZ) *</label>
+              <label className="block text-sm font-semibold text-navy mb-2">Elanın Başlığı *</label>
               <input
                 value={form.title_az}
                 onChange={(e) => update("title_az", e.target.value)}
@@ -174,18 +173,8 @@ export default function AddListingPage() {
                 }`}
               />
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-semibold text-navy mb-2">Başlıq (RU)</label>
-                <input value={form.title_ru} onChange={(e) => update("title_ru", e.target.value)} className="w-full rounded-xl bg-slate-50 border border-navy/15 px-4 py-3 text-sm outline-none text-navy focus:border-copper transition" />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-navy mb-2">Başlıq (EN)</label>
-                <input value={form.title_en} onChange={(e) => update("title_en", e.target.value)} className="w-full rounded-xl bg-slate-50 border border-navy/15 px-4 py-3 text-sm outline-none text-navy focus:border-copper transition" />
-              </div>
-            </div>
             <div>
-              <label className="block text-sm font-semibold text-navy mb-2">Ətraflı Məlumat (AZ) *</label>
+              <label className="block text-sm font-semibold text-navy mb-2">Ətraflı Məlumat *</label>
               <textarea
                 rows={4}
                 value={form.description_az}
@@ -240,7 +229,7 @@ export default function AddListingPage() {
               label="Şəkil Faylları Seç (Ən azı 1 ədəd) *"
             />
             {errors.images && <p className="text-xs text-red-500 font-medium">⚠️ Zəhmət olmasa, ən azı bir şəkil əlavə edin.</p>}
-            
+
             <MediaUploader
               files={videoFiles}
               setFiles={setVideoFiles}

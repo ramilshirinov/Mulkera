@@ -3,7 +3,22 @@
 import { useEffect, useState } from "react";
 import { useApp } from "@/context/AppContext";
 import { useRouter } from "next/navigation";
-import { FiUser, FiSave, FiLogOut, FiTrash2, FiLock } from "react-icons/fi";
+import Link from "next/link";
+import {
+  FiUser,
+  FiSave,
+  FiLogOut,
+  FiTrash2,
+  FiLock,
+  FiHome,
+  FiEdit2,
+  FiEye,
+  FiFacebook,
+  FiInstagram,
+  FiMessageCircle,
+  FiBell,
+  FiBarChart2,
+} from "react-icons/fi";
 
 export default function ProfilePage() {
   const { user, supabase } = useApp();
@@ -14,6 +29,11 @@ export default function ProfilePage() {
     phone: "",
     avatar_url: "",
     agency_name: "RF Master Sales Agency",
+    facebook_url: "",
+    instagram_url: "",
+    whatsapp: "",
+    email_notifications: true,
+    sms_notifications: false,
   });
 
   // Şifrə dəyişmə state-ləri
@@ -21,6 +41,10 @@ export default function ProfilePage() {
     newPassword: "",
     confirmPassword: "",
   });
+
+  // Öz elanlarım state-ləri
+  const [myListings, setMyListings] = useState([]);
+  const [listingsLoading, setListingsLoading] = useState(true);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -46,12 +70,37 @@ export default function ProfilePage() {
           phone: data.phone || "",
           avatar_url: data.avatar_url || "",
           agency_name: data.agency_name || "RF Master Sales Agency",
+          facebook_url: data.facebook_url || "",
+          instagram_url: data.instagram_url || "",
+          whatsapp: data.whatsapp || "",
+          email_notifications:
+            data.email_notifications !== null && data.email_notifications !== undefined
+              ? data.email_notifications
+              : true,
+          sms_notifications: data.sms_notifications || false,
         });
       }
       setLoading(false);
     }
 
+    // NOT: "listings" cədvəlində elanı istifadəçiyə bağlayan sütunun adını
+    // öz layihənizə uyğun tənzimləyin (məs. "user_id" və ya "agent_id").
+    async function fetchMyListings() {
+      setListingsLoading(true);
+      const { data, error } = await supabase
+        .from("listings")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false });
+
+      if (!error && data) {
+        setMyListings(data);
+      }
+      setListingsLoading(false);
+    }
+
     fetchProfile();
+    fetchMyListings();
   }, [user, supabase, router]);
 
   const handleAvatarUpload = async (e) => {
@@ -91,6 +140,11 @@ export default function ProfilePage() {
         phone: form.phone,
         avatar_url: form.avatar_url,
         agency_name: form.agency_name,
+        facebook_url: form.facebook_url,
+        instagram_url: form.instagram_url,
+        whatsapp: form.whatsapp,
+        email_notifications: form.email_notifications,
+        sms_notifications: form.sms_notifications,
         updated_at: new Date().toISOString(),
       })
       .eq("id", user.id);
@@ -143,6 +197,23 @@ export default function ProfilePage() {
     }
   };
 
+  const handleDeleteListing = async (id) => {
+    if (!confirm("Bu elanı silmək istədiyinizə əminsiniz?")) return;
+
+    const { error } = await supabase.from("listings").delete().eq("id", id);
+
+    if (error) {
+      alert("Elan silinərkən xəta: " + error.message);
+    } else {
+      setMyListings((prev) => prev.filter((item) => item.id !== id));
+    }
+  };
+
+  // Statistika hesablamaları
+  const totalListings = myListings.length;
+  const totalViews = myListings.reduce((sum, item) => sum + (item.views || 0), 0);
+  const activeListings = myListings.filter((item) => item.status !== "sold" && item.status !== "inactive").length;
+
   if (loading) {
     return <div className="py-32 text-center text-navy font-medium">Profil yüklənir...</div>;
   }
@@ -152,6 +223,22 @@ export default function ProfilePage() {
       <h1 className="text-3xl font-bold font-heading text-navy flex items-center gap-2">
         <FiUser className="text-copper" /> Profil Məlumatları
       </h1>
+
+      {/* Statistika Kartları */}
+      <div className="grid grid-cols-3 gap-3">
+        <div className="card-surface bg-white rounded-2xl shadow-card border border-navy/10 p-4 text-center">
+          <p className="text-2xl font-extrabold text-navy">{totalListings}</p>
+          <p className="text-[11px] text-navy/60 font-medium mt-1">Ümumi Elan</p>
+        </div>
+        <div className="card-surface bg-white rounded-2xl shadow-card border border-navy/10 p-4 text-center">
+          <p className="text-2xl font-extrabold text-navy">{activeListings}</p>
+          <p className="text-[11px] text-navy/60 font-medium mt-1">Aktiv Elan</p>
+        </div>
+        <div className="card-surface bg-white rounded-2xl shadow-card border border-navy/10 p-4 text-center">
+          <p className="text-2xl font-extrabold text-navy">{totalViews}</p>
+          <p className="text-[11px] text-navy/60 font-medium mt-1">Ümumi Baxış</p>
+        </div>
+      </div>
 
       {/* Əsas Profil Formu */}
       <form onSubmit={handleSave} className="card-surface p-6 sm:p-8 bg-white rounded-2xl shadow-card border border-navy/10 space-y-6">
@@ -207,6 +294,85 @@ export default function ProfilePage() {
           />
         </div>
 
+        {/* Sosial / Əlaqə Linkləri */}
+        <div className="pt-2 border-t border-navy/10 space-y-4">
+          <p className="text-sm font-semibold text-navy">Sosial Media və Əlaqə Linkləri</p>
+
+          <div className="relative">
+            <FiFacebook className="absolute left-3 top-1/2 -translate-y-1/2 text-navy/40" />
+            <input
+              type="text"
+              value={form.facebook_url}
+              onChange={(e) => setForm({ ...form, facebook_url: e.target.value })}
+              placeholder="Facebook profil linki"
+              className="w-full rounded-xl bg-slate-50 border border-navy/15 pl-10 pr-4 py-3 text-sm outline-none text-navy focus:border-copper transition"
+            />
+          </div>
+
+          <div className="relative">
+            <FiInstagram className="absolute left-3 top-1/2 -translate-y-1/2 text-navy/40" />
+            <input
+              type="text"
+              value={form.instagram_url}
+              onChange={(e) => setForm({ ...form, instagram_url: e.target.value })}
+              placeholder="Instagram profil linki"
+              className="w-full rounded-xl bg-slate-50 border border-navy/15 pl-10 pr-4 py-3 text-sm outline-none text-navy focus:border-copper transition"
+            />
+          </div>
+
+          <div className="relative">
+            <FiMessageCircle className="absolute left-3 top-1/2 -translate-y-1/2 text-navy/40" />
+            <input
+              type="text"
+              value={form.whatsapp}
+              onChange={(e) => setForm({ ...form, whatsapp: e.target.value })}
+              placeholder="WhatsApp nömrəsi"
+              className="w-full rounded-xl bg-slate-50 border border-navy/15 pl-10 pr-4 py-3 text-sm outline-none text-navy focus:border-copper transition"
+            />
+          </div>
+        </div>
+
+        {/* Bildiriş Tənzimləmələri */}
+        <div className="pt-2 border-t border-navy/10 space-y-4">
+          <p className="text-sm font-semibold text-navy flex items-center gap-2">
+            <FiBell className="text-copper" /> Bildiriş Tənzimləmələri
+          </p>
+
+          <label className="flex items-center justify-between cursor-pointer">
+            <span className="text-sm text-navy">Email bildirişləri</span>
+            <button
+              type="button"
+              onClick={() => setForm({ ...form, email_notifications: !form.email_notifications })}
+              className={`w-11 h-6 rounded-full transition relative shrink-0 ${
+                form.email_notifications ? "bg-copper" : "bg-slate-200"
+              }`}
+            >
+              <span
+                className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${
+                  form.email_notifications ? "translate-x-5" : "translate-x-0"
+                }`}
+              />
+            </button>
+          </label>
+
+          <label className="flex items-center justify-between cursor-pointer">
+            <span className="text-sm text-navy">SMS bildirişləri</span>
+            <button
+              type="button"
+              onClick={() => setForm({ ...form, sms_notifications: !form.sms_notifications })}
+              className={`w-11 h-6 rounded-full transition relative shrink-0 ${
+                form.sms_notifications ? "bg-copper" : "bg-slate-200"
+              }`}
+            >
+              <span
+                className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${
+                  form.sms_notifications ? "translate-x-5" : "translate-x-0"
+                }`}
+              />
+            </button>
+          </label>
+        </div>
+
         <button
           type="submit"
           disabled={saving}
@@ -215,6 +381,74 @@ export default function ProfilePage() {
           <FiSave /> {saving ? "Yadda saxlanılır..." : "Dəyişiklikləri Yadda Saxla"}
         </button>
       </form>
+
+      {/* Öz Elanlarım Paneli */}
+      <div className="card-surface p-6 sm:p-8 bg-white rounded-2xl shadow-card border border-navy/10 space-y-4">
+        <h2 className="text-xl font-bold font-heading text-navy flex items-center gap-2 border-b border-navy/10 pb-4">
+          <FiHome className="text-copper" /> Mənim Elanlarım
+        </h2>
+
+        {listingsLoading ? (
+          <p className="text-sm text-navy/60 py-4 text-center">Elanlar yüklənir...</p>
+        ) : myListings.length === 0 ? (
+          <div className="text-center py-8">
+            <p className="text-sm text-navy/60 mb-4">Hələ heç bir elanınız yoxdur.</p>
+            <Link
+              href="/listings/new"
+              className="inline-flex items-center gap-2 rounded-xl bg-navy text-white hover:bg-copper py-2.5 px-5 text-xs font-bold transition"
+            >
+              İlk Elanınızı Yerləşdirin
+            </Link>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {myListings.map((item) => (
+              <div
+                key={item.id}
+                className="flex items-center gap-3 rounded-xl border border-navy/10 p-3 hover:border-copper/40 transition"
+              >
+                <div className="w-16 h-16 rounded-lg bg-slate-100 overflow-hidden shrink-0">
+                  {item.image_url ? (
+                    <img src={item.image_url} alt={item.title} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-navy/30">
+                      <FiHome />
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-navy truncate">{item.title}</p>
+                  <p className="text-xs text-navy/60 mt-0.5">
+                    {item.price?.toLocaleString()} {item.currency || "AZN"}
+                  </p>
+                  <p className="text-[11px] text-navy/40 mt-0.5 flex items-center gap-1">
+                    <FiEye className="inline" /> {item.views || 0} baxış
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <Link
+                    href={`/listings/edit/${item.id}`}
+                    className="p-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-navy transition"
+                    title="Redaktə et"
+                  >
+                    <FiEdit2 className="text-sm" />
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteListing(item.id)}
+                    className="p-2 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 transition"
+                    title="Sil"
+                  >
+                    <FiTrash2 className="text-sm" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* Şifrə Dəyişmə Bölməsi */}
       <form onSubmit={handlePasswordUpdate} className="card-surface p-6 sm:p-8 bg-white rounded-2xl shadow-card border border-navy/10 space-y-6">

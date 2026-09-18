@@ -1,26 +1,33 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
+import Link from "next/link";
 import { useApp } from "@/context/AppContext";
+import { useFavorite } from "@/hooks/useFavorite";
 import { 
   FiMapPin, FiCalendar, FiDollarSign, FiHome, FiMaximize2, 
   FiShield, FiChevronLeft, FiChevronRight, FiX, FiPhone, 
-  FiUser, FiCheckCircle, FiPlay, FiLayers, FiBriefcase 
+  FiUser, FiCheckCircle, FiPlay, FiLayers, FiBriefcase, FiHeart 
 } from "react-icons/fi";
 
 export default function ListingDetailPage() {
   const { id } = useParams();
-  const { supabase, locale } = useApp();
+  const router = useRouter();
+  const { supabase, locale, user } = useApp();
   const [listing, setListing] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState(null); // Sorğu xətasını "tapılmadı"dan ayırmaq üçün
   const [activeMediaIndex, setActiveMediaIndex] = useState(null); // Lightbox üçün
   const [mediaTypeFilter, setMediaTypeFilter] = useState("all"); // 'all', 'image', 'video'
+
+  const { isFavorited, toggling, toggleFavorite } = useFavorite(id);
 
   useEffect(() => {
     async function fetchListingDetail() {
       if (!id) return;
       setLoading(true);
+      setFetchError(null);
       try {
         const { data, error } = await supabase
           .from("listings")
@@ -34,13 +41,21 @@ export default function ListingDetailPage() {
           .eq("id", id)
           .maybeSingle();
 
-        if (!error && data) {
-          setListing(data);
-        } else {
+        if (error) {
+          // ƏVVƏLKİ BUG: bu xəta udulurdu və istifadəçiyə "Elan tapılmadı" göstərilirdi,
+          // baxmayaraq ki, elan mövcud idi (məs. profiles cədvəlində RLS bloklaması,
+          // şəbəkə xətası və s.). İndi xətanı loglayır və ayrıca vəziyyət kimi saxlayırıq.
+          console.error("Elan sorğusunda xəta:", error);
+          setFetchError(error);
           setListing(null);
+        } else {
+          // error yoxdursa, data === null olması HƏQİQƏTƏN "tapılmadı" deməkdir
+          setListing(data);
         }
       } catch (err) {
         console.error("Xəta baş verdi:", err);
+        setFetchError(err);
+        setListing(null);
       } finally {
         setLoading(false);
       }
@@ -49,6 +64,13 @@ export default function ListingDetailPage() {
     fetchListingDetail();
   }, [id, supabase]);
 
+  const handleFavoriteClick = async () => {
+    const result = await toggleFavorite();
+    if (result?.requiresAuth) {
+      router.push(`/login?redirect=/listings/${id}`);
+    }
+  };
+
   if (loading) {
     return <div className="py-32 text-center text-navy/60 font-medium">Elan məlumatları yüklənir...</div>;
   }
@@ -56,8 +78,14 @@ export default function ListingDetailPage() {
   if (!listing) {
     return (
       <div className="py-32 text-center">
-        <h2 className="text-2xl font-bold text-navy mb-2">Elan tapılmadı</h2>
-        <p className="text-navy/60 text-sm">Axtardığınız elan silinib və ya mövcud deyil.</p>
+        <h2 className="text-2xl font-bold text-navy mb-2">
+          {fetchError ? "Elanı yükləmək mümkün olmadı" : "Elan tapılmadı"}
+        </h2>
+        <p className="text-navy/60 text-sm">
+          {fetchError
+            ? "Server xətası baş verdi. Zəhmət olmasa bir az sonra yenidən cəhd edin."
+            : "Axtardığınız elan silinib və ya mövcud deyil."}
+        </p>
       </div>
     );
   }
@@ -96,9 +124,24 @@ export default function ListingDetailPage() {
               </span>
             )}
           </div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold font-heading text-navy">
-            {listing.title || "Daşınmaz Əmlak Elanı"}
-          </h1>
+          <div className="flex items-start gap-3">
+            <h1 className="text-2xl sm:text-3xl font-extrabold font-heading text-navy">
+              {listing.title || "Daşınmaz Əmlak Elanı"}
+            </h1>
+            <button
+              onClick={handleFavoriteClick}
+              disabled={toggling}
+              aria-pressed={isFavorited}
+              aria-label={isFavorited ? "Sevimlilərdən çıxar" : "Sevimlilərə əlavə et"}
+              className={`shrink-0 mt-1 w-10 h-10 rounded-full border flex items-center justify-center transition ${
+                isFavorited
+                  ? "bg-copper/10 border-copper text-copper"
+                  : "bg-white border-navy/10 text-navy/40 hover:text-copper hover:border-copper"
+              } ${toggling ? "opacity-60 cursor-wait" : ""}`}
+            >
+              <FiHeart className={isFavorited ? "fill-current" : ""} />
+            </button>
+          </div>
           <p className="text-sm text-navy/60 flex items-center gap-1.5 mt-1.5">
             <FiMapPin className="text-copper shrink-0" /> 
             <span>{listing.address} {listing.districts?.name ? `· ${listing.districts.name}` : ""}</span>
@@ -256,23 +299,41 @@ export default function ListingDetailPage() {
           <div className="bg-white rounded-2xl p-6 border border-navy/10 shadow-card sticky top-24 space-y-6">
             <h3 className="text-lg font-bold text-navy">Elan Sahibi</h3>
             
-            <div className="flex items-center gap-4">
-              <div className="w-14 h-14 rounded-2xl bg-navy/10 flex items-center justify-center font-bold text-navy text-lg overflow-hidden border border-navy/10">
-                {listing.profiles?.avatar_url ? (
-                  <img src={listing.profiles.avatar_url} alt="Profile" className="w-full h-full object-cover" />
-                ) : (
-                  <span>{listing.profiles?.full_name?.[0] || "R"}</span>
-                )}
+            {listing.profiles?.id ? (
+              <Link
+                href={`/realtors/${listing.profiles.id}`}
+                className="flex items-center gap-4 group -m-2 p-2 rounded-xl hover:bg-navy/5 transition"
+              >
+                <div className="w-14 h-14 rounded-2xl bg-navy/10 flex items-center justify-center font-bold text-navy text-lg overflow-hidden border border-navy/10">
+                  {listing.profiles?.avatar_url ? (
+                    <img src={listing.profiles.avatar_url} alt="Profile" className="w-full h-full object-cover" />
+                  ) : (
+                    <span>{listing.profiles?.full_name?.[0] || "R"}</span>
+                  )}
+                </div>
+                <div>
+                  <h4 className="font-bold text-navy flex items-center gap-1 group-hover:text-copper transition">
+                    {listing.profiles?.full_name || "RF Master Agent"} <FiCheckCircle className="text-emerald-600 text-sm" />
+                  </h4>
+                  <p className="text-xs text-navy/60 mt-0.5">
+                    {listing.profiles?.agency_name || "RF Master Sales Agency"}
+                  </p>
+                  <p className="text-xs text-copper mt-0.5 opacity-0 group-hover:opacity-100 transition">
+                    Bütün elanlarına bax →
+                  </p>
+                </div>
+              </Link>
+            ) : (
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 rounded-2xl bg-navy/10 flex items-center justify-center font-bold text-navy text-lg overflow-hidden border border-navy/10">
+                  <span>R</span>
+                </div>
+                <div>
+                  <h4 className="font-bold text-navy">RF Master Agent</h4>
+                  <p className="text-xs text-navy/60 mt-0.5">RF Master Sales Agency</p>
+                </div>
               </div>
-              <div>
-                <h4 className="font-bold text-navy flex items-center gap-1">
-                  {listing.profiles?.full_name || "RF Master Agent"} <FiCheckCircle className="text-emerald-600 text-sm" />
-                </h4>
-                <p className="text-xs text-navy/60 mt-0.5">
-                  {listing.profiles?.agency_name || "RF Master Sales Agency"}
-                </p>
-              </div>
-            </div>
+            )}
 
             <div className="space-y-3 pt-2">
               {listing.profiles?.phone ? (
