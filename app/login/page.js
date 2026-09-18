@@ -1,5 +1,7 @@
 "use client";
 
+export const dynamic = 'force-dynamic';
+
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -102,7 +104,6 @@ export default function LoginPage() {
               <label className="block text-xs font-bold uppercase tracking-wider text-navy/70">
                 Şifrə
               </label>
-              {/* Buradakı classclassName olaraq düzəldildi */}
               <Link href="/forgot-password" className="text-xs font-semibold text-copper hover:underline">
                 Şifrəni unutmusunuz?
               </Link>
