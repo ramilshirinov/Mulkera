@@ -15,13 +15,41 @@ const LocationPicker = dynamic(() => import("@/components/LocationPicker"), {
 
 const DOCUMENT_OPTIONS = ["Çıxarış", "Kupça", "Texniki pasport", "Notarial müqavilə", "Digər"];
 
-// Diqqət: title_ru / title_en / description_ru / description_en sahələri silindi.
-// Yalnız Azərbaycan dili saxlanılır. Baza sxemində bu sütunlar hələ də varsa,
-// göndərilərkən avtomatik olaraq null kimi ötürülür (aşağıda payload-a bax).
+const azerbaijanRegions = [
+  { name: "Bakı", districts: ["Binəqədi", "Nəsimi", "Nizami", "Nərimanov", "Səbail", "Sabunçu", "Suraxanı", "Xətai", "Xəzər", "Pirallahı", "Yasamal", "Qaradağ", "Digər"] },
+  { name: "Sumqayıt", districts: ["1-ci mkr", "2-ci mkr", "3-cü mkr", "4-cü mkr", "5-ci mkr", "6-cı mkr", "7-ci mkr", "8-ci mkr", "9-cu mkr", "Stansiya Sumqayıt", "Corat", "Hacı Zeynalabdin", "Novxanı bağları", "İnşaatçılar", "Digər"] },
+  { name: "Abşeron", districts: ["Xırdalan", "Masazır", "Saray", "Ceyranbatan", "Güzdək", "Hökməli", "Məmmədli", "Mehdiabad", "Novxanı", "Pirəkəşkül", "Digər"] },
+  { name: "Gəncə", districts: ["Kəpəz rayonu", "Nizami rayonu", "Digər"] },
+  { name: "Şirvan", districts: ["Şirvan şəhər mərkəzi", "Hacıqəfil", "Digər"] },
+  { name: "Lənkəran", districts: ["Lənkəran şəhər mərkəzi", "Girdəh", "Kirov", "Liman", "Digər"] },
+  { name: "Mingəçevir", districts: ["Mingəçevir şəhər mərkəzi", "Ağcəbədi yolu istiqaməti", "Digər"] },
+  { name: "Naftalan", districts: ["Naftalan mərkəz", "Digər"] },
+  { name: "Şəki", districts: ["Şəki şəhər mərkəzi", "Oxut", "Kiçik Dəhnə", "Böyük Dəhnə", "Digər"] },
+  { name: "Quba", districts: ["Quba şəhər mərkəzi", "Qırmızı qəsəbə", "Nügədi", "Aşağı Tülkədar", "Digər"] },
+  { name: "Qusar", districts: ["Qusar şəhər mərkəzi", "Həzrə", "Aşağı Ləgər", "Digər"] },
+  { name: "Xaçmaz", districts: ["Xaçmaz şəhər mərkəzi", "Xudat", "Nabran", "Müxbirlər", "Digər"] },
+  { name: "Qəbələ", districts: ["Qəbələ şəhər mərkəzi", "Vəndam", "Bum", "Nic", "Digər"] },
+  { name: "İsmayıllı", districts: ["İsmayıllı şəhər mərkəzi", "Lahıc", "İvanovka", "Qoşakənd", "Digər"] },
+  { name: "Şamaxı", districts: ["Şamaxı şəhər mərkəzi", "Mədrəsə", "Çuxuryurd", "Digər"] },
+  { name: "Ağdam", districts: ["Ağdam şəhər mərkəzi", "Quzanlı", "Bənövşələr", "Digər"] },
+  { name: "Füzuli", districts: ["Füzuli şəhər mərkəzi", "Horadiz", "Aşağı Əbdürrəhmanlı", "Digər"] },
+  { name: "Zəngilan", districts: ["Zəngilan şəhər mərkəzi", "Ağbənd", "Mincivan", "Digər"] },
+  { name: "Cəbrayil", districts: ["Cəbrayil şəhər mərkəzi", "Mehdixeyli", "Digər"] },
+  { name: "Qubadlı", districts: ["Qubadlı şəhər mərkəzi", "Digər"] },
+  { name: "Laçın", districts: ["Laçın şəhər mərkəzi", "Güləbird", "Zabux", "Digər"] },
+  { name: "Kəlbəcər", districts: ["Kəlbəcər şəhər mərkəzi", "İstisu", "Digər"] },
+  { name: "Şuşa", districts: ["Şuşa şəhər mərkəzi", "Turşsu", "Digər"] },
+  { name: "Xocavənd", districts: ["Xocavənd şəhər mərkəzi", "Hadrut", "Digər"] },
+  { name: "Xocalı", districts: ["Xocalı şəhər mərkəzi", "Əsgəran", "Digər"] },
+  { name: "Digər", districts: ["Digər bölgələr"] }
+];
+
 const emptyForm = {
   title_az: "",
   description_az: "",
   category_id: "",
+  selected_city: "Bakı",
+  district_name: "",
   district_id: "",
   transaction_type: "sale",
   price: "",
@@ -39,11 +67,11 @@ const emptyForm = {
 };
 
 export default function AddListingPage() {
-  const { t, user, profile, supabase, loadingAuth } = useApp();
+  const { user, profile, supabase, loadingAuth, locale } = useApp();
   const router = useRouter();
 
   const [categories, setCategories] = useState([]);
-  const [districts, setDistricts] = useState([]);
+  const [dbDistricts, setDbDistricts] = useState([]);
   const [form, setForm] = useState(emptyForm);
   const [imageFiles, setImageFiles] = useState([]);
   const [videoFiles, setVideoFiles] = useState([]);
@@ -51,9 +79,11 @@ export default function AddListingPage() {
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
 
+  const currentDistricts = azerbaijanRegions.find((c) => c.name === form.selected_city)?.districts || [];
+
   useEffect(() => {
     fetchCategories(supabase).then(setCategories).catch(() => {});
-    fetchDistricts(supabase).then(setDistricts).catch(() => {});
+    fetchDistricts(supabase).then(setDbDistricts).catch(() => {});
   }, [supabase]);
 
   useEffect(() => {
@@ -81,7 +111,7 @@ export default function AddListingPage() {
     if (!form.title_az) fieldErrors.title_az = true;
     if (!form.description_az) fieldErrors.description_az = true;
     if (!form.category_id) fieldErrors.category_id = true;
-    if (!form.district_id) fieldErrors.district_id = true;
+    if (!form.selected_city) fieldErrors.selected_city = true;
     if (!form.price || Number(form.price) <= 0) fieldErrors.price = true;
     if (!form.area_m2 || Number(form.area_m2) <= 0) fieldErrors.area_m2 = true;
     if (!form.address) fieldErrors.address = true;
@@ -96,6 +126,8 @@ export default function AddListingPage() {
 
     setSubmitting(true);
     try {
+      const fullAddress = `${form.selected_city}${form.district_name ? ", " + form.district_name : ""}, ${form.address}`;
+
       const payload = {
         owner_id: user.id,
         owner_type: profile?.role === "realtor" ? "agency" : "owner",
@@ -105,8 +137,8 @@ export default function AddListingPage() {
         description_az: form.description_az,
         description_ru: null,
         description_en: null,
-        category_id: Number(form.category_id),
-        district_id: Number(form.district_id),
+        category_id: form.category_id === "other" ? null : Number(form.category_id),
+        district_id: form.district_id ? Number(form.district_id) : (dbDistricts[0]?.id || null),
         transaction_type: form.transaction_type,
         price: Number(form.price),
         currency: form.currency,
@@ -115,7 +147,7 @@ export default function AddListingPage() {
         yard_sot: form.yard_sot ? Number(form.yard_sot) : null,
         floor_number: form.floor_number ? Number(form.floor_number) : null,
         total_floors: form.total_floors ? Number(form.total_floors) : null,
-        address: form.address,
+        address: fullAddress,
         latitude: form.latitude ? Number(form.latitude) : null,
         longitude: form.longitude ? Number(form.longitude) : null,
         documents: form.documents,
@@ -158,7 +190,6 @@ export default function AddListingPage() {
       )}
 
       <form onSubmit={handleSubmit} className="space-y-8">
-        {/* ƏSAS MƏLUMATLAR */}
         <section className="card-surface p-6 sm:p-8 bg-white rounded-2xl shadow-card border border-navy/10 space-y-6">
           <h2 className="text-lg font-bold text-navy border-b pb-3">Əsas Məlumatlar</h2>
           <div className="space-y-4">
@@ -195,10 +226,11 @@ export default function AddListingPage() {
                     errors.category_id ? "border-red-400 bg-red-50/30" : "border-navy/15"
                   }`}
                 >
-                  <option value="">— Seçin —</option>
+                  <option value="">— Kateqoriya seçin —</option>
                   {categories.map((c) => (
-                    <option key={c.id} value={c.id}>{localizedField(c, "name", "az")}</option>
+                    <option key={c.id} value={c.id}>{localizedField(c, "name", locale || "az")}</option>
                   ))}
+                  <option value="other">Digər</option>
                 </select>
               </div>
               <div>
@@ -211,13 +243,13 @@ export default function AddListingPage() {
                   <option value="sale">Satış</option>
                   <option value="long_term_rent">Uzunmüddətli kirayə</option>
                   <option value="daily_rent">Günlük kirayə</option>
+                  <option value="other">Digər</option>
                 </select>
               </div>
             </div>
           </div>
         </section>
 
-        {/* MEDIA FAYLLAR */}
         <section className="card-surface p-6 sm:p-8 bg-white rounded-2xl shadow-card border border-navy/10 space-y-4">
           <h2 className="text-lg font-bold text-navy border-b pb-3">Şəkil və Videolar</h2>
           <div className="space-y-5">
@@ -240,31 +272,45 @@ export default function AddListingPage() {
           </div>
         </section>
 
-        {/* MƏKAN VƏ ÜNVAN */}
         <section className="card-surface p-6 sm:p-8 bg-white rounded-2xl shadow-card border border-navy/10 space-y-4">
           <h2 className="text-lg font-bold text-navy border-b pb-3">Məkan və Ünvan</h2>
           <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-semibold text-navy mb-2">Rayon / Bölgə *</label>
-              <select
-                value={form.district_id}
-                onChange={(e) => update("district_id", e.target.value)}
-                className={`w-full rounded-xl bg-slate-50 border px-4 py-3 text-sm outline-none text-navy focus:border-copper transition ${
-                  errors.district_id ? "border-red-400 bg-red-50/30" : "border-navy/15"
-                }`}
-              >
-                <option value="">— Rayon seçin —</option>
-                {districts.map((d) => (
-                  <option key={d.id} value={d.id}>{localizedField(d, "name", "az")}</option>
-                ))}
-              </select>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-semibold text-navy mb-2">Şəhər / Rayon *</label>
+                <select
+                  value={form.selected_city}
+                  onChange={(e) => {
+                    update("selected_city", e.target.value);
+                    update("district_name", "");
+                  }}
+                  className="w-full rounded-xl bg-slate-50 border border-navy/15 px-4 py-3 text-sm outline-none text-navy focus:border-copper transition"
+                >
+                  {azerbaijanRegions.map((reg) => (
+                    <option key={reg.name} value={reg.name}>{reg.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-navy mb-2">Qəsəbə / Ərazi</label>
+                <select
+                  value={form.district_name}
+                  onChange={(e) => update("district_name", e.target.value)}
+                  className="w-full rounded-xl bg-slate-50 border border-navy/15 px-4 py-3 text-sm outline-none text-navy focus:border-copper transition"
+                >
+                  <option value="">— Qəsəbə seçin —</option>
+                  {currentDistricts.map((d) => (
+                    <option key={d} value={d}>{d}</option>
+                  ))}
+                </select>
+              </div>
             </div>
             <div>
-              <label className="block text-sm font-semibold text-navy mb-2">Ünvan / Küçə *</label>
+              <label className="block text-sm font-semibold text-navy mb-2">Dəqiq Ünvan / Küçə *</label>
               <input
                 value={form.address}
                 onChange={(e) => update("address", e.target.value)}
-                placeholder="Məs: Sumqayıt şəhəri, Sülh küçəsi"
+                placeholder="Məs: Sülh küçəsi, bina 42"
                 className={`w-full rounded-xl bg-slate-50 border px-4 py-3 text-sm outline-none text-navy focus:border-copper transition ${
                   errors.address ? "border-red-400 bg-red-50/30" : "border-navy/15"
                 }`}
@@ -284,7 +330,6 @@ export default function AddListingPage() {
           </div>
         </section>
 
-        {/* ƏMLAK PARAMETRLƏRİ */}
         <section className="card-surface p-6 sm:p-8 bg-white rounded-2xl shadow-card border border-navy/10 space-y-4">
           <h2 className="text-lg font-bold text-navy border-b pb-3">Əmlakın Parametrləri</h2>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -293,9 +338,12 @@ export default function AddListingPage() {
               <input
                 type="number"
                 min="0"
+                max="999999999"
                 placeholder="150000"
                 value={form.price}
-                onChange={(e) => update("price", e.target.value)}
+                onChange={(e) => {
+                  if (e.target.value.length <= 10) update("price", e.target.value);
+                }}
                 className={`w-full rounded-xl bg-slate-50 border px-4 py-3 text-sm outline-none text-navy focus:border-copper transition ${
                   errors.price ? "border-red-400 bg-red-50/30" : "border-navy/15"
                 }`}
@@ -318,9 +366,12 @@ export default function AddListingPage() {
               <input
                 type="number"
                 min="0"
+                max="999999"
                 placeholder="85"
                 value={form.area_m2}
-                onChange={(e) => update("area_m2", e.target.value)}
+                onChange={(e) => {
+                  if (e.target.value.length <= 7) update("area_m2", e.target.value);
+                }}
                 className={`w-full rounded-xl bg-slate-50 border px-4 py-3 text-sm outline-none text-navy focus:border-copper transition ${
                   errors.area_m2 ? "border-red-400 bg-red-50/30" : "border-navy/15"
                 }`}
@@ -328,19 +379,59 @@ export default function AddListingPage() {
             </div>
             <div>
               <label className="block text-sm font-semibold text-navy mb-2">Otaq sayı</label>
-              <input type="number" min="0" placeholder="3" value={form.room_count} onChange={(e) => update("room_count", e.target.value)} className="w-full rounded-xl bg-slate-50 border border-navy/15 px-4 py-3 text-sm outline-none text-navy focus:border-copper transition" />
+              <input 
+                type="number" 
+                min="0" 
+                max="99" 
+                placeholder="3" 
+                value={form.room_count} 
+                onChange={(e) => {
+                  if (e.target.value.length <= 2) update("room_count", e.target.value);
+                }} 
+                className="w-full rounded-xl bg-slate-50 border border-navy/15 px-4 py-3 text-sm outline-none text-navy focus:border-copper transition" 
+              />
             </div>
             <div>
               <label className="block text-sm font-semibold text-navy mb-2">Həyət sahəsi (sot)</label>
-              <input type="number" min="0" placeholder="2" value={form.yard_sot} onChange={(e) => update("yard_sot", e.target.value)} className="w-full rounded-xl bg-slate-50 border border-navy/15 px-4 py-3 text-sm outline-none text-navy focus:border-copper transition" />
+              <input 
+                type="number" 
+                min="0" 
+                max="9999" 
+                placeholder="2" 
+                value={form.yard_sot} 
+                onChange={(e) => {
+                  if (e.target.value.length <= 4) update("yard_sot", e.target.value);
+                }} 
+                className="w-full rounded-xl bg-slate-50 border border-navy/15 px-4 py-3 text-sm outline-none text-navy focus:border-copper transition" 
+              />
             </div>
             <div>
               <label className="block text-sm font-semibold text-navy mb-2">Mərtəbə</label>
-              <input type="number" min="0" placeholder="2" value={form.floor_number} onChange={(e) => update("floor_number", e.target.value)} className="w-full rounded-xl bg-slate-50 border border-navy/15 px-4 py-3 text-sm outline-none text-navy focus:border-copper transition" />
+              <input 
+                type="number" 
+                min="0" 
+                max="999" 
+                placeholder="2" 
+                value={form.floor_number} 
+                onChange={(e) => {
+                  if (e.target.value.length <= 3) update("floor_number", e.target.value);
+                }} 
+                className="w-full rounded-xl bg-slate-50 border border-navy/15 px-4 py-3 text-sm outline-none text-navy focus:border-copper transition" 
+              />
             </div>
             <div>
               <label className="block text-sm font-semibold text-navy mb-2">Binanın ümumi mərtəbəsi</label>
-              <input type="number" min="0" placeholder="16" value={form.total_floors} onChange={(e) => update("total_floors", e.target.value)} className="w-full rounded-xl bg-slate-50 border border-navy/15 px-4 py-3 text-sm outline-none text-navy focus:border-copper transition" />
+              <input 
+                type="number" 
+                min="0" 
+                max="999" 
+                placeholder="16" 
+                value={form.total_floors} 
+                onChange={(e) => {
+                  if (e.target.value.length <= 3) update("total_floors", e.target.value);
+                }} 
+                className="w-full rounded-xl bg-slate-50 border border-navy/15 px-4 py-3 text-sm outline-none text-navy focus:border-copper transition" 
+              />
             </div>
             <div className="sm:col-span-2">
               <label className="block text-sm font-semibold text-navy mb-2">Əlaqə Nömrəsi *</label>

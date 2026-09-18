@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useApp } from "@/context/AppContext";
 import { useFavorite } from "@/hooks/useFavorite";
 import ListingCard from "@/components/ListingCard";
+import { localizedField } from "@/lib/listings";
 import { 
   FiMapPin, FiCalendar, FiDollarSign, FiHome, FiMaximize2, 
   FiShield, FiChevronLeft, FiChevronRight, FiX, FiPhone, 
@@ -21,7 +22,6 @@ export default function ListingDetailPage() {
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState(null);
   const [activeMediaIndex, setActiveMediaIndex] = useState(null);
-  const [mediaTypeFilter, setMediaTypeFilter] = useState("all");
 
   const { isFavorited, toggling, toggleFavorite } = useFavorite(id);
 
@@ -31,36 +31,56 @@ export default function ListingDetailPage() {
       setLoading(true);
       setFetchError(null);
       try {
+        // Əsas elan məlumatları (profiles olmadan, xəta verməməsi üçün)
         const { data, error } = await supabase
           .from("listings")
           .select(`
-            *
+            *,
+            listing_photos (*),
+            categories (*),
+            districts (*)
           `)
           .eq("id", id)
           .maybeSingle();
 
         if (error) {
-          console.error("Elan sorğusunda xəta:", error);
+          console.error("Elan sorğusunda xəta mesajı:", error.message);
+          console.error("Xəta kodu:", error.code);
           setFetchError(error);
           setListing(null);
         } else {
-          setListing(data);
+          let listingData = data;
 
-          if (data) {
-            // Əlaqədar (oxşar) elanları çəkək
-            const { data: related } = await supabase
-              .from("listings")
-              .select(`
-                *
-              `)
-              .neq("id", id)
-              .limit(3);
+          // Əgər elanın user_id-si varsa, profil məlumatını ayrıca çəkək
+          if (listingData && listingData.user_id) {
+            const { data: profileData } = await supabase
+              .from("profiles")
+              .select("*")
+              .eq("id", listingData.user_id)
+              .maybeSingle();
             
+            listingData.profiles = profileData || null;
+          }
+
+          setListing(listingData);
+
+          if (listingData) {
+            // Oxşar elanların çəkilməsi
+            let query = supabase
+              .from("listings")
+              .select("*, listing_photos(*), categories(*), districts(*)")
+              .neq("id", id);
+
+            if (listingData.category_id) {
+              query = query.eq("category_id", listingData.category_id);
+            }
+
+            const { data: related } = await query.limit(3);
             setRelatedListings(related || []);
           }
         }
       } catch (err) {
-        console.error("Xəta baş verdi:", err);
+        console.error("Gözlənilməz xəta baş verdi:", err);
         setFetchError(err);
         setListing(null);
       } finally {
@@ -84,43 +104,50 @@ export default function ListingDetailPage() {
 
   if (!listing) {
     return (
-      <div className="py-32 text-center">
+      <div className="py-32 text-center px-4">
         <h2 className="text-2xl font-bold text-navy mb-2">
           {fetchError ? "Elanı yükləmək mümkün olmadı" : "Elan tapılmadı"}
         </h2>
         <p className="text-navy/60 text-sm mb-6">
           {fetchError
-            ? "Server xətası baş verdi. Zəhmət olmasa bir az sonra yenidən cəhd edin."
+            ? "Məlumat bazasından məlumat alınarkən xəta baş verdi. Zəhmət olmasa bir az sonra yenidən cəhd edin."
             : "Axtardığınız elan silinib və ya mövcud deyil."}
         </p>
-        <Link href="/" className="px-6 py-2.5 bg-navy text-white rounded-xl text-sm font-semibold">
-          Ana səhifəyə qayıt
+        <Link href="/listings" className="px-6 py-2.5 bg-navy text-white rounded-xl text-sm font-semibold hover:bg-copper transition inline-block">
+          Elanlara qayıt
         </Link>
       </div>
     );
   }
 
-  const mediaItems = listing.listing_photos && listing.listing_photos.length > 0 
-    ? listing.listing_photos.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
+  const rawPhotos = listing.listing_photos || [];
+  const sortedPhotos = rawPhotos
+    .filter(p => !p.media_type || p.media_type === "image")
+    .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+
+  const mediaItems = sortedPhotos.length > 0
+    ? sortedPhotos
     : [
         ...(listing.image_url ? [{ id: 1, url: listing.image_url, media_type: "image" }] : []),
         ...(listing.video_url ? [{ id: 2, url: listing.video_url, media_type: "video" }] : [])
       ];
 
-  const mainImage = mediaItems.find(m => m.media_type === "image")?.url || "/images/placeholder-property.svg";
+  const mainImage = mediaItems[0]?.url || "/images/placeholder-property.svg";
+  const categoryTitle = listing.categories ? localizedField(listing.categories, "name", locale) : (listing.category || "Əmlak");
+  const districtTitle = listing.districts ? localizedField(listing.districts, "name", locale) : "";
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
       
-      {/* Üst Başlıq və Qiymət Hissəsi */}
+      {/* Üst Başlıq və Qiymət */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
         <div>
-          <div className="flex items-center gap-2 mb-2">
+          <div className="flex items-center gap-2 mb-2 flex-wrap">
             <span className="px-3 py-1 rounded-full text-xs font-semibold bg-copper/10 text-copper uppercase tracking-wider">
-              {listing.categories?.name || listing.category || "Əmlak"}
+              {categoryTitle}
             </span>
             <span className="px-3 py-1 rounded-full text-xs font-semibold bg-navy/10 text-navy uppercase tracking-wider">
-              {listing.transaction_type === "sale" ? "Satış" : listing.transaction_type === "daily_rent" ? "Günlük Kirayə" : "Uzunmüddətli Kirayə"}
+              {listing.transaction_type === "sale" ? "Satış" : listing.transaction_type === "daily_rent" ? "Günlük Kirayə" : listing.transaction_type === "other" ? "Digər" : "Uzunmüddətli Kirayə"}
             </span>
             {listing.mortgage_available && (
               <span className="px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700">
@@ -130,14 +157,14 @@ export default function ListingDetailPage() {
           </div>
           <div className="flex items-start gap-3">
             <h1 className="text-2xl sm:text-3xl font-extrabold font-heading text-navy">
-              {listing.title || "Daşınmaz Əmlak Elanı"}
+              {localizedField(listing, "title", locale) || listing.title || "Daşınmaz Əmlak Elanı"}
             </h1>
             <button
               onClick={handleFavoriteClick}
               disabled={toggling}
               aria-pressed={isFavorited}
               aria-label={isFavorited ? "Sevimlilərdən çıxar" : "Sevimlilərə əlavə et"}
-              className={`shrink-0 mt-1 w-10 h-10 rounded-full border flex items-center justify-center transition ${
+              className={`shrink-0 mt-1 w-10 h-10 rounded-full border flex items-center justify-center transition cursor-pointer ${
                 isFavorited
                   ? "bg-copper/10 border-copper text-copper"
                   : "bg-white border-navy/10 text-navy/40 hover:text-copper hover:border-copper"
@@ -148,7 +175,7 @@ export default function ListingDetailPage() {
           </div>
           <p className="text-sm text-navy/60 flex items-center gap-1.5 mt-1.5">
             <FiMapPin className="text-copper shrink-0" /> 
-            <span>{listing.address} {listing.districts?.name ? `· ${listing.districts.name}` : ""}</span>
+            <span>{listing.address} {districtTitle ? `· ${districtTitle}` : ""}</span>
           </p>
         </div>
 
@@ -164,7 +191,7 @@ export default function ListingDetailPage() {
         </div>
       </div>
 
-      {/* Şəkil və Video Qalereyası */}
+      {/* Media / Qalereya */}
       <div className="mb-10 space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="md:col-span-2 h-[420px] rounded-2xl overflow-hidden shadow-card border border-navy/10 relative cursor-pointer group bg-slate-100">
@@ -174,7 +201,7 @@ export default function ListingDetailPage() {
               className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
               onClick={() => setActiveMediaIndex(0)}
             />
-            <div className="absolute bottom-4 right-4 bg-navy/80 text-white text-xs px-3.5 py-2 rounded-xl backdrop-blur-sm flex items-center gap-2 shadow-sm">
+            <div className="absolute bottom-4 right-4 bg-navy/80 text-white text-xs px-3.5 py-2 rounded-xl backdrop-blur-sm flex items-center gap-2 shadow-sm pointer-events-none">
               <FiMaximize2 /> Tam ekran bax
             </div>
           </div>
@@ -208,7 +235,7 @@ export default function ListingDetailPage() {
               <button
                 key={item.id || index}
                 onClick={() => setActiveMediaIndex(index)}
-                className="shrink-0 w-24 h-20 rounded-xl overflow-hidden border-2 border-transparent hover:border-copper transition relative"
+                className="shrink-0 w-24 h-20 rounded-xl overflow-hidden border-2 border-transparent hover:border-copper transition relative cursor-pointer"
               >
                 {item.media_type === "video" ? (
                   <div className="w-full h-full bg-navy flex items-center justify-center text-white">
@@ -223,7 +250,7 @@ export default function ListingDetailPage() {
         )}
       </div>
 
-      {/* Əsas Məlumatlar və Əlaqə Grid */}
+      {/* Detallar və Əlaqə */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 space-y-8">
           
@@ -244,16 +271,12 @@ export default function ListingDetailPage() {
                 <span className="text-navy/60 block text-xs">Mərtəbə</span>
                 <span className="font-bold text-navy text-base">{listing.floor_number || listing.floor || "—"} / {listing.total_floors || "—"}</span>
               </div>
-              {listing.land_area && (
+              {listing.yard_sot && (
                 <div className="p-3.5 rounded-xl bg-slate-50 border border-navy/5">
-                  <span className="text-navy/60 block text-xs">Torpaq / Həyət Sahəsi</span>
-                  <span className="font-bold text-navy text-base">{listing.land_area} sot</span>
+                  <span className="text-navy/60 block text-xs">Həyət sahəsi</span>
+                  <span className="font-bold text-navy text-base">{listing.yard_sot} sot</span>
                 </div>
               )}
-              <div className="p-3.5 rounded-xl bg-slate-50 border border-navy/5">
-                <span className="text-navy/60 block text-xs">Təhvil Tarixi</span>
-                <span className="font-bold text-navy text-base">{listing.delivery_date || "Hazır bina"}</span>
-              </div>
               <div className="p-3.5 rounded-xl bg-slate-50 border border-navy/5">
                 <span className="text-navy/60 block text-xs">Elan tarixi</span>
                 <span className="font-bold text-navy text-base">
@@ -266,7 +289,7 @@ export default function ListingDetailPage() {
           <div className="bg-white rounded-2xl p-6 border border-navy/10 shadow-card">
             <h3 className="text-lg font-bold text-navy mb-3">Ətraflı Məlumat</h3>
             <p className="text-navy/80 leading-relaxed whitespace-pre-line text-sm">
-              {listing.description || "Bu elan üçün əlavə açıqlama qeyd olunmayıb."}
+              {localizedField(listing, "description", locale) || listing.description_az || listing.description || "Bu elan üçün əlavə açıqlama qeyd olunmayıb."}
             </p>
           </div>
 
@@ -293,49 +316,31 @@ export default function ListingDetailPage() {
           <div className="bg-white rounded-2xl p-6 border border-navy/10 shadow-card sticky top-24 space-y-6">
             <h3 className="text-lg font-bold text-navy">Elan Sahibi</h3>
             
-            {listing.profiles?.id ? (
-              <Link
-                href={`/realtors/${listing.profiles.id}`}
-                className="flex items-center gap-4 group -m-2 p-2 rounded-xl hover:bg-navy/5 transition"
-              >
-                <div className="w-14 h-14 rounded-2xl bg-navy/10 flex items-center justify-center font-bold text-navy text-lg overflow-hidden border border-navy/10">
-                  {listing.profiles?.avatar_url ? (
-                    <img src={listing.profiles.avatar_url} alt="Profile" className="w-full h-full object-cover" />
-                  ) : (
-                    <span>{listing.profiles?.full_name?.[0] || "R"}</span>
-                  )}
-                </div>
-                <div>
-                  <h4 className="font-bold text-navy flex items-center gap-1 group-hover:text-copper transition">
-                    {listing.profiles?.full_name || "RF Master Agent"} <FiCheckCircle className="text-emerald-600 text-sm" />
-                  </h4>
-                  <p className="text-xs text-navy/60 mt-0.5">
-                    {listing.profiles?.agency_name || "RF Master Sales Agency"}
-                  </p>
-                  <p className="text-xs text-copper mt-0.5 opacity-0 group-hover:opacity-100 transition">
-                    Bütün elanlarına bax →
-                  </p>
-                </div>
-              </Link>
-            ) : (
-              <div className="flex items-center gap-4">
-                <div className="w-14 h-14 rounded-2xl bg-navy/10 flex items-center justify-center font-bold text-navy text-lg overflow-hidden border border-navy/10">
-                  <span>R</span>
-                </div>
-                <div>
-                  <h4 className="font-bold text-navy">RF Master Agent</h4>
-                  <p className="text-xs text-navy/60 mt-0.5">RF Master Sales Agency</p>
-                </div>
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 rounded-2xl bg-navy/10 flex items-center justify-center font-bold text-navy text-lg overflow-hidden border border-navy/10">
+                {listing.profiles?.avatar_url ? (
+                  <img src={listing.profiles.avatar_url} alt="Profile" className="w-full h-full object-cover" />
+                ) : (
+                  <span>{listing.profiles?.full_name?.[0] || "R"}</span>
+                )}
               </div>
-            )}
+              <div>
+                <h4 className="font-bold text-navy flex items-center gap-1">
+                  {listing.profiles?.full_name || "RF Master Agent"} <FiCheckCircle className="text-emerald-600 text-sm" />
+                </h4>
+                <p className="text-xs text-navy/60 mt-0.5">
+                  {listing.profiles?.agency_name || "RF Master Sales Agency"}
+                </p>
+              </div>
+            </div>
 
             <div className="space-y-3 pt-2">
-              {listing.profiles?.phone ? (
+              {listing.phone_number || listing.profiles?.phone ? (
                 <a 
-                  href={`tel:${listing.profiles.phone}`}
+                  href={`tel:${listing.phone_number || listing.profiles?.phone}`}
                   className="w-full flex items-center justify-center gap-2 rounded-xl bg-navy text-white hover:bg-copper py-3 px-4 text-sm font-semibold transition shadow-sm"
                 >
-                  <FiPhone /> Zəng Et: {listing.profiles.phone}
+                  <FiPhone /> Zəng Et: {listing.phone_number || listing.profiles?.phone}
                 </a>
               ) : (
                 <div className="text-center text-xs text-navy/50 py-2">Telefon nömrəsi qeyd olunmayıb</div>
@@ -357,7 +362,7 @@ export default function ListingDetailPage() {
 
       </div>
 
-      {/* Əlaqədar (Oxşar) Elanlar Bölməsi */}
+      {/* Oxşar Elanlar */}
       {relatedListings.length > 0 && (
         <div className="mt-16 pt-10 border-t border-navy/10">
           <h3 className="text-2xl font-bold font-heading text-navy mb-6">Oxşar Elanlar</h3>
@@ -374,14 +379,14 @@ export default function ListingDetailPage() {
         <div className="fixed inset-0 z-50 bg-black/95 flex items-center justify-center p-4">
           <button 
             onClick={() => setActiveMediaIndex(null)}
-            className="absolute top-6 right-6 text-white bg-white/10 p-3 rounded-full hover:bg-white/20 transition z-50"
+            className="absolute top-6 right-6 text-white bg-white/10 p-3 rounded-full hover:bg-white/20 transition z-50 cursor-pointer"
           >
             <FiX size={26} />
           </button>
           
           <button 
             onClick={() => setActiveMediaIndex((prev) => (prev > 0 ? prev - 1 : mediaItems.length - 1))}
-            className="absolute left-6 text-white bg-white/10 p-3.5 rounded-full hover:bg-white/20 transition z-50"
+            className="absolute left-6 text-white bg-white/10 p-3.5 rounded-full hover:bg-white/20 transition z-50 cursor-pointer"
           >
             <FiChevronLeft size={28} />
           </button>
@@ -405,7 +410,7 @@ export default function ListingDetailPage() {
 
           <button 
             onClick={() => setActiveMediaIndex((prev) => (prev < mediaItems.length - 1 ? prev + 1 : 0))}
-            className="absolute right-6 text-white bg-white/10 p-3.5 rounded-full hover:bg-white/20 transition z-50"
+            className="absolute right-6 text-white bg-white/10 p-3.5 rounded-full hover:bg-white/20 transition z-50 cursor-pointer"
           >
             <FiChevronRight size={28} />
           </button>
