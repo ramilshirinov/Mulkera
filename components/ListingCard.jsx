@@ -1,19 +1,26 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useApp } from "@/context/AppContext";
 import { localizedField } from "@/lib/listings";
-import { FiMapPin } from "react-icons/fi";
+import { FiMapPin, FiHome } from "react-icons/fi";
+
+const PLACEHOLDER = "/images/placeholder-property.svg";
 
 export default function ListingCard({ listing }) {
   const { locale } = useApp();
+  const [imgError, setImgError] = useState(false);
 
   // Şəklin təyini: listing_photos massivindən əsas şəkli tapırıq, yoxdursa köhnə image_url-ə və ya placeholder-ə baxırıq
-  const mainPhoto = 
-    listing.listing_photos?.find((p) => p.media_type === "image")?.url || 
-    listing.image_url || 
-    "/images/placeholder-property.svg";
+  const rawPhoto =
+    listing.listing_photos?.find((p) => p.media_type === "image")?.url ||
+    listing.image_url ||
+    PLACEHOLDER;
+
+  // Boş sətir ("") də uyğunsuz sayılmalıdır, əks halda Image komponenti xəta verir
+  const mainPhoto = imgError || !rawPhoto ? PLACEHOLDER : rawPhoto;
 
   // Çoxdilli başlıq və kateqoriya
   const title = localizedField(listing, "title", locale);
@@ -21,20 +28,32 @@ export default function ListingCard({ listing }) {
   const districtName = listing.districts ? localizedField(listing.districts, "name", locale) : "";
 
   return (
-    <Link 
-      href={`/listings/${listing.id}`} 
+    <Link
+      href={`/listings/${listing.id}`}
       className="card-surface bg-white rounded-2xl overflow-hidden group block transition hover:shadow-lg border border-navy/10 flex flex-col justify-between"
     >
       <div>
         {/* Şəkil və nişanlar */}
         <div className="relative h-48 w-full bg-slate-100 overflow-hidden">
-          <Image
-            src={mainPhoto}
-            alt={title || "Əmlak"}
-            fill
-            className="object-cover group-hover:scale-105 transition duration-300"
-          />
-          
+          {mainPhoto === PLACEHOLDER && !rawPhoto ? (
+            <div className="w-full h-full flex items-center justify-center text-navy/25">
+              <FiHome size={32} />
+            </div>
+          ) : (
+            <Image
+              src={mainPhoto}
+              alt={title || "Əmlak"}
+              fill
+              sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+              className="object-cover group-hover:scale-105 transition duration-300"
+              onError={() => setImgError(true)}
+              // Əgər next.config.js-də bu domen üçün remotePatterns tənzimlənməyibsə,
+              // şəkil heç vaxt yüklənməyəcək. Aşağıdakı sətri müvəqqəti test üçün
+              // aça bilərsiniz (Next.js-in optimallaşdırmasını keçərək birbaşa yükləyir):
+              // unoptimized
+            />
+          )}
+
           {/* VIP badge */}
           {listing.is_vip && (
             <span className="absolute top-3 right-3 bg-amber-500 text-white text-[10px] font-extrabold px-2.5 py-1 rounded-full shadow-sm">

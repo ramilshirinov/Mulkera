@@ -11,6 +11,7 @@ const TRANSACTION_LABELS = {
   sale: "Satış",
   long_term_rent: "Kirayə",
   daily_rent: "Günlük kirayə",
+  other: "Digər",
 };
 
 const PAGE_SIZE = 24;
@@ -49,103 +50,107 @@ function ListingsPageContent() {
   const azerbaijanRegions = [
     {
       name: "Bakı",
-      districts: ["Binəqədi", "Nəsimi", "Nizami", "Nərimanov", "Səbail", "Sabunçu", "Suraxanı", "Xətai", "Xəzər", "Pirallahı", "Yasamal", "Qaradağ"]
+      districts: ["Binəqədi", "Nəsimi", "Nizami", "Nərimanov", "Səbail", "Sabunçu", "Suraxanı", "Xətai", "Xəzər", "Pirallahı", "Yasamal", "Qaradağ", "Digər"]
     },
     {
       name: "Sumqayıt",
-      districts: ["1-ci mkr", "2-ci mkr", "3-cü mkr", "4-cü mkr", "5-ci mkr", "6-cı mkr", "7-ci mkr", "8-ci mkr", "9-cu mkr", "Stansiya Sumqayıt", "Corat", "Hacı Zeynalabdin", "Novxanı bağları", "İnşaatçılar"]
+      districts: ["1-ci mkr", "2-ci mkr", "3-cü mkr", "4-cü mkr", "5-ci mkr", "6-cı mkr", "7-ci mkr", "8-ci mkr", "9-cu mkr", "Stansiya Sumqayıt", "Corat", "Hacı Zeynalabdin", "Novxanı bağları", "İnşaatçılar", "Digər"]
     },
     {
       name: "Abşeron",
-      districts: ["Xırdalan", "Masazır", "Saray", "Ceyranbatan", "Güzdək", "Hökməli", "Məmmədli", "Mehdiabad", "Novxanı", "Pirəkəşkül"]
+      districts: ["Xırdalan", "Masazır", "Saray", "Ceyranbatan", "Güzdək", "Hökməli", "Məmmədli", "Mehdiabad", "Novxanı", "Pirəkəşkül", "Digər"]
     },
     {
       name: "Gəncə",
-      districts: ["Kəpəz rayonu", "Nizami rayonu"]
+      districts: ["Kəpəz rayonu", "Nizami rayonu", "Digər"]
     },
     {
       name: "Şirvan",
-      districts: ["Şirvan şəhər mərkəzi", "Hacıqəfil"]
+      districts: ["Şirvan şəhər mərkəzi", "Hacıqəfil", "Digər"]
     },
     {
       name: "Lənkəran",
-      districts: ["Lənkəran şəhər mərkəzi", "Girdəh", "Kirov", "Liman"]
+      districts: ["Lənkəran şəhər mərkəzi", "Girdəh", "Kirov", "Liman", "Digər"]
     },
     {
       name: "Mingəçevir",
-      districts: ["Mingəçevir şəhər mərkəzi", "Ağcəbədi yolu istiqaməti"]
+      districts: ["Mingəçevir şəhər mərkəzi", "Ağcəbədi yolu istiqaməti", "Digər"]
     },
     {
       name: "Naftalan",
-      districts: ["Naftalan mərkəz"]
+      districts: ["Naftalan mərkəz", "Digər"]
     },
     {
       name: "Şəki",
-      districts: ["Şəki şəhər mərkəzi", "Oxut", "Kiçik Dəhnə", "Böyük Dəhnə"]
+      districts: ["Şəki şəhər mərkəzi", "Oxut", "Kiçik Dəhnə", "Böyük Dəhnə", "Digər"]
     },
     {
       name: "Quba",
-      districts: ["Quba şəhər mərkəzi", "Qırmızı qəsəbə", "Nügədi", "Aşağı Tülkədar"]
+      districts: ["Quba şəhər mərkəzi", "Qırmızı qəsəbə", "Nügədi", "Aşağı Tülkədar", "Digər"]
     },
     {
       name: "Qusar",
-      districts: ["Qusar şəhər mərkəzi", "Həzrə", "Aşağı Ləgər"]
+      districts: ["Qusar şəhər mərkəzi", "Həzrə", "Aşağı Ləgər", "Digər"]
     },
     {
       name: "Xaçmaz",
-      districts: ["Xaçmaz şəhər mərkəzi", "Xudat", "Nabran", "Müxbirlər"]
+      districts: ["Xaçmaz şəhər mərkəzi", "Xudat", "Nabran", "Müxbirlər", "Digər"]
     },
     {
       name: "Qəbələ",
-      districts: ["Qəbələ şəhər mərkəzi", "Vəndam", "Bum", "Nic"]
+      districts: ["Qəbələ şəhər mərkəzi", "Vəndam", "Bum", "Nic", "Digər"]
     },
     {
       name: "İsmayıllı",
-      districts: ["İsmayıllı şəhər mərkəzi", "Lahıc", "İvanovka", "Qoşakənd"]
+      districts: ["İsmayıllı şəhər mərkəzi", "Lahıc", "İvanovka", "Qoşakənd", "Digər"]
     },
     {
       name: "Şamaxı",
-      districts: ["Şamaxı şəhər mərkəzi", "Mədrəsə", "Çuxuryurd"]
+      districts: ["Şamaxı şəhər mərkəzi", "Mədrəsə", "Çuxuryurd", "Digər"]
     },
     {
       name: "Ağdam",
-      districts: ["Ağdam şəhər mərkəzi", "Quzanlı", "Bənövşələr"]
+      districts: ["Ağdam şəhər mərkəzi", "Quzanlı", "Bənövşələr", "Digər"]
     },
     {
       name: "Füzuli",
-      districts: ["Füzuli şəhər mərkəzi", "Horadiz", "Aşağı Əbdürrəhmanlı"]
+      districts: ["Füzuli şəhər mərkəzi", "Horadiz", "Aşağı Əbdürrəhmanlı", "Digər"]
     },
     {
       name: "Zəngilan",
-      districts: ["Zəngilan şəhər mərkəzi", "Ağbənd", "Mincivan"]
+      districts: ["Zəngilan şəhər mərkəzi", "Ağbənd", "Mincivan", "Digər"]
     },
     {
       name: "Cəbrayil",
-      districts: ["Cəbrayil şəhər mərkəzi", "Mehdixeyli"]
+      districts: ["Cəbrayil şəhər mərkəzi", "Mehdixeyli", "Digər"]
     },
     {
       name: "Qubadlı",
-      districts: ["Qubadlı şəhər mərkəzi"]
+      districts: ["Qubadlı şəhər mərkəzi", "Digər"]
     },
     {
       name: "Laçın",
-      districts: ["Laçın şəhər mərkəzi", "Güləbird", "Zabux"]
+      districts: ["Laçın şəhər mərkəzi", "Güləbird", "Zabux", "Digər"]
     },
     {
       name: "Kəlbəcər",
-      districts: ["Kəlbəcər şəhər mərkəzi", "İstisu"]
+      districts: ["Kəlbəcər şəhər mərkəzi", "İstisu", "Digər"]
     },
     {
       name: "Şuşa",
-      districts: ["Şuşa şəhər mərkəzi", "Turşsu"]
+      districts: ["Şuşa şəhər mərkəzi", "Turşsu", "Digər"]
     },
     {
       name: "Xocavənd",
-      districts: ["Xocavənd şəhər mərkəzi", "Hadrut"]
+      districts: ["Xocavənd şəhər mərkəzi", "Hadrut", "Digər"]
     },
     {
       name: "Xocalı",
-      districts: ["Xocalı şəhər mərkəzi", "Əsgəran"]
+      districts: ["Xocalı şəhər mərkəzi", "Əsgəran", "Digər"]
+    },
+    {
+      name: "Digər",
+      districts: ["Digər bölgələr"]
     }
   ];
 
@@ -173,7 +178,7 @@ function ListingsPageContent() {
     setLoading(true);
     try {
       const filters = {
-        categoryId: selectedCategory !== "all" ? Number(selectedCategory) : undefined,
+        categoryId: selectedCategory !== "all" && selectedCategory !== "other" ? Number(selectedCategory) : undefined,
         transactionType: transactionType !== "all" ? transactionType : undefined,
         districtId: selectedDistrict !== "all" && !isNaN(selectedDistrict) ? Number(selectedDistrict) : undefined,
         keyword: searchQuery || undefined,
@@ -209,7 +214,7 @@ function ListingsPageContent() {
     const roomsCount = item.rooms || item.room_count || 0;
     const matchesRooms =
       roomsFilter === "all" ||
-      (roomsFilter === "5+" ? roomsCount >= 5 : roomsCount === Number(roomsFilter));
+      (roomsFilter === "5+" ? roomsCount >= 5 : roomsFilter === "other" ? roomsCount > 6 : roomsCount === Number(roomsFilter));
 
     const matchesCity =
       cityFilter === "all" ||
@@ -221,7 +226,10 @@ function ListingsPageContent() {
       item.address?.toLowerCase().includes(selectedDistrict.toLowerCase()) ||
       (item.districts && localizedField(item.districts, "name", locale).toLowerCase().includes(selectedDistrict.toLowerCase()));
 
-    return matchesMinPrice && matchesMaxPrice && matchesRooms && matchesCity && matchesDistrictName;
+    const matchesCategory =
+      selectedCategory !== "other" || !item.category_id; // "Digər" kateqoriya seçimi üçün
+
+    return matchesMinPrice && matchesMaxPrice && matchesRooms && matchesCity && matchesDistrictName && matchesCategory;
   });
 
   const resetFilters = () => {
@@ -284,6 +292,7 @@ function ListingsPageContent() {
                 {localizedField(cat, "name", locale)}
               </option>
             ))}
+            <option value="other">Digər</option>
           </select>
 
           <select
@@ -295,6 +304,7 @@ function ListingsPageContent() {
             <option value="sale">Satış</option>
             <option value="long_term_rent">Uzunmüddətli kirayə</option>
             <option value="daily_rent">Günlük kirayə</option>
+            <option value="other">Digər</option>
           </select>
         </div>
 
@@ -357,7 +367,8 @@ function ListingsPageContent() {
             <option value="2">2 otaqlı</option>
             <option value="3">3 otaqlı</option>
             <option value="4">4 otaqlı</option>
-            <option value="5">5+ otaqlı</option>
+            <option value="5+">5+ otaqlı</option>
+            <option value="other">Digər</option>
           </select>
 
           <div className="flex justify-end">

@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useApp } from "@/context/AppContext";
 import { useFavorite } from "@/hooks/useFavorite";
+import ListingCard from "@/components/ListingCard";
 import { 
   FiMapPin, FiCalendar, FiDollarSign, FiHome, FiMaximize2, 
   FiShield, FiChevronLeft, FiChevronRight, FiX, FiPhone, 
@@ -16,10 +17,11 @@ export default function ListingDetailPage() {
   const router = useRouter();
   const { supabase, locale, user } = useApp();
   const [listing, setListing] = useState(null);
+  const [relatedListings, setRelatedListings] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [fetchError, setFetchError] = useState(null); // Sorğu xətasını "tapılmadı"dan ayırmaq üçün
-  const [activeMediaIndex, setActiveMediaIndex] = useState(null); // Lightbox üçün
-  const [mediaTypeFilter, setMediaTypeFilter] = useState("all"); // 'all', 'image', 'video'
+  const [fetchError, setFetchError] = useState(null);
+  const [activeMediaIndex, setActiveMediaIndex] = useState(null);
+  const [mediaTypeFilter, setMediaTypeFilter] = useState("all");
 
   const { isFavorited, toggling, toggleFavorite } = useFavorite(id);
 
@@ -32,25 +34,30 @@ export default function ListingDetailPage() {
         const { data, error } = await supabase
           .from("listings")
           .select(`
-            *,
-            categories (*),
-            districts (*),
-            profiles (*),
-            listing_photos (*)
+            *
           `)
           .eq("id", id)
           .maybeSingle();
 
         if (error) {
-          // ƏVVƏLKİ BUG: bu xəta udulurdu və istifadəçiyə "Elan tapılmadı" göstərilirdi,
-          // baxmayaraq ki, elan mövcud idi (məs. profiles cədvəlində RLS bloklaması,
-          // şəbəkə xətası və s.). İndi xətanı loglayır və ayrıca vəziyyət kimi saxlayırıq.
           console.error("Elan sorğusunda xəta:", error);
           setFetchError(error);
           setListing(null);
         } else {
-          // error yoxdursa, data === null olması HƏQİQƏTƏN "tapılmadı" deməkdir
           setListing(data);
+
+          if (data) {
+            // Əlaqədar (oxşar) elanları çəkək
+            const { data: related } = await supabase
+              .from("listings")
+              .select(`
+                *
+              `)
+              .neq("id", id)
+              .limit(3);
+            
+            setRelatedListings(related || []);
+          }
         }
       } catch (err) {
         console.error("Xəta baş verdi:", err);
@@ -81,27 +88,24 @@ export default function ListingDetailPage() {
         <h2 className="text-2xl font-bold text-navy mb-2">
           {fetchError ? "Elanı yükləmək mümkün olmadı" : "Elan tapılmadı"}
         </h2>
-        <p className="text-navy/60 text-sm">
+        <p className="text-navy/60 text-sm mb-6">
           {fetchError
             ? "Server xətası baş verdi. Zəhmət olmasa bir az sonra yenidən cəhd edin."
             : "Axtardığınız elan silinib və ya mövcud deyil."}
         </p>
+        <Link href="/" className="px-6 py-2.5 bg-navy text-white rounded-xl text-sm font-semibold">
+          Ana səhifəyə qayıt
+        </Link>
       </div>
     );
   }
 
-  // Media elementlərini toplayaq (listing_photos cədvəlindən və ya tək image_url-dən)
   const mediaItems = listing.listing_photos && listing.listing_photos.length > 0 
     ? listing.listing_photos.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
     : [
         ...(listing.image_url ? [{ id: 1, url: listing.image_url, media_type: "image" }] : []),
         ...(listing.video_url ? [{ id: 2, url: listing.video_url, media_type: "video" }] : [])
       ];
-
-  const filteredMedia = mediaItems.filter(item => {
-    if (mediaTypeFilter === "all") return true;
-    return item.media_type === mediaTypeFilter;
-  });
 
   const mainImage = mediaItems.find(m => m.media_type === "image")?.url || "/images/placeholder-property.svg";
 
@@ -163,7 +167,6 @@ export default function ListingDetailPage() {
       {/* Şəkil və Video Qalereyası */}
       <div className="mb-10 space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {/* Əsas Böyük Şəkil */}
           <div className="md:col-span-2 h-[420px] rounded-2xl overflow-hidden shadow-card border border-navy/10 relative cursor-pointer group bg-slate-100">
             <img 
               src={mainImage} 
@@ -172,11 +175,10 @@ export default function ListingDetailPage() {
               onClick={() => setActiveMediaIndex(0)}
             />
             <div className="absolute bottom-4 right-4 bg-navy/80 text-white text-xs px-3.5 py-2 rounded-xl backdrop-blur-sm flex items-center gap-2 shadow-sm">
-              <FiMaximize2 /> Tam ekran bax (Lightbox)
+              <FiMaximize2 /> Tam ekran bax
             </div>
           </div>
 
-          {/* Yan Kiçik Şəkillər / Videolar */}
           <div className="grid grid-cols-2 md:grid-cols-1 gap-4 h-[420px]">
             {mediaItems.slice(1, 3).map((item, index) => (
               <div 
@@ -200,7 +202,6 @@ export default function ListingDetailPage() {
           </div>
         </div>
 
-        {/* Bütün Media Siyahısı (Şəkillər və Videolar) */}
         {mediaItems.length > 2 && (
           <div className="flex gap-3 overflow-x-auto pb-2">
             {mediaItems.map((item, index) => (
@@ -224,11 +225,8 @@ export default function ListingDetailPage() {
 
       {/* Əsas Məlumatlar və Əlaqə Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        
-        {/* Sol Tərəf - Detallar */}
         <div className="lg:col-span-2 space-y-8">
           
-          {/* Əmlakın Xüsusiyyətləri Bloku */}
           <div className="bg-white rounded-2xl p-6 border border-navy/10 shadow-card">
             <h3 className="text-lg font-bold text-navy mb-4 flex items-center gap-2">
               <FiHome className="text-copper" /> Əmlakın Parametrləri
@@ -265,7 +263,6 @@ export default function ListingDetailPage() {
             </div>
           </div>
 
-          {/* Ətraflı Təsvir */}
           <div className="bg-white rounded-2xl p-6 border border-navy/10 shadow-card">
             <h3 className="text-lg font-bold text-navy mb-3">Ətraflı Məlumat</h3>
             <p className="text-navy/80 leading-relaxed whitespace-pre-line text-sm">
@@ -273,14 +270,12 @@ export default function ListingDetailPage() {
             </p>
           </div>
 
-          {/* Xəritə Bloku */}
           <div className="bg-white rounded-2xl p-6 border border-navy/10 shadow-card">
             <h3 className="text-lg font-bold text-navy mb-3 flex items-center gap-2">
               <FiMapPin className="text-copper" /> Yerləşdiyi Ünvan və Xəritə
             </h3>
             <p className="text-sm text-navy/70 mb-4">{listing.address}</p>
             <div className="w-full h-72 rounded-xl overflow-hidden bg-slate-100 border border-navy/10 flex items-center justify-center relative">
-              {/* Xəritə inteqrasiya sahəsi */}
               <iframe
                 title="Property Location Map"
                 width="100%"
@@ -294,7 +289,6 @@ export default function ListingDetailPage() {
 
         </div>
 
-        {/* Sağ Tərəf - Agent / Elan Sahibi */}
         <div>
           <div className="bg-white rounded-2xl p-6 border border-navy/10 shadow-card sticky top-24 space-y-6">
             <h3 className="text-lg font-bold text-navy">Elan Sahibi</h3>
@@ -363,7 +357,19 @@ export default function ListingDetailPage() {
 
       </div>
 
-      {/* Lightbox / Tam Ekran Media Modalı */}
+      {/* Əlaqədar (Oxşar) Elanlar Bölməsi */}
+      {relatedListings.length > 0 && (
+        <div className="mt-16 pt-10 border-t border-navy/10">
+          <h3 className="text-2xl font-bold font-heading text-navy mb-6">Oxşar Elanlar</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {relatedListings.map((item) => (
+              <ListingCard key={item.id} listing={item} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Lightbox Modalı */}
       {activeMediaIndex !== null && (
         <div className="fixed inset-0 z-50 bg-black/95 flex items-center justify-center p-4">
           <button 
