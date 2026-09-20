@@ -1,3 +1,4 @@
+// FAYL YOLU: components/MediaUploader.jsx
 "use client";
 
 import { useState } from "react";
@@ -5,25 +6,17 @@ import { useApp } from "@/context/AppContext";
 import { FiUpload, FiVideo, FiX, FiLoader } from "react-icons/fi";
 
 /**
- * DİQQƏT — Əvvəlki versiyada bu komponent:
- * 1) "images" / "setImages" adlı props qəbul edirdi, amma AddListingPage
- *    ona "files" / "setFiles" göndərirdi -> setImages undefined olduğu üçün
- *    şəkil seçəndə "setImages is not a function" xətası verirdi.
- * 2) Faylları HEÇ VAXT Supabase Storage-a yükləmirdi — sadəcə
- *    URL.createObjectURL() ilə brauzerin öz yaddaşında müvəqqəti keçid
- *    yaradırdı. Bu keçidlər səhifə yenilənəndə itir və backend-ə real
- *    şəkil ünvanı kimi ötürülmürdü (elan yaradılanda şəkilsiz qalırdı).
- * 3) "video" tipini dəstəkləmirdi — accept və label props-larını qəbul
- *    etmirdi, hər zaman "Şəkil seç" yazırdı və video faylını <img> kimi
- *    göstərməyə çalışırdı.
- *
- * Bu versiya faylları həqiqətən Supabase Storage-a ("listings-media"
- * bucket-i, ProfilePage-dəki avatar yükləməsi ilə eyni bucket) yükləyir,
- * hər faylı {url, path, name, type} formatında saxlayır və
- * AddListingPage-in gözlədiyi files/setFiles props-larına uyğundur.
- * Süni fayl sayı/ölçü limiti qoyulmayıb.
+ * Faylları Supabase Storage-a ("listings-media" bucket-i) yükləyir və
+ * hər faylı { url, path, name, type } formatında files massivinə əlavə edir.
+ * Props: files, setFiles, accept, type ("image" | "video"), label
  */
-export default function MediaUploader({ files = [], setFiles, accept = "image/*", type = "image", label }) {
+export default function MediaUploader({
+  files = [],
+  setFiles,
+  accept = "image/*",
+  type = "image",
+  label,
+}) {
   const { supabase, user } = useApp();
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
@@ -48,9 +41,7 @@ export default function MediaUploader({ files = [], setFiles, accept = "image/*"
           .from("listings-media")
           .upload(filePath, file, { cacheControl: "3600", upsert: false });
 
-        if (uploadErr) {
-          throw uploadErr;
-        }
+        if (uploadErr) throw uploadErr;
 
         const { data } = supabase.storage.from("listings-media").getPublicUrl(filePath);
 
@@ -73,22 +64,31 @@ export default function MediaUploader({ files = [], setFiles, accept = "image/*"
 
   return (
     <div className="space-y-3">
-      {label && <label className="block text-sm font-semibold text-navy">{label}</label>}
+      {label && (
+        <label className="block text-sm font-semibold text-navy dark:text-slate-200">
+          {label}
+        </label>
+      )}
 
       <div className="flex flex-wrap gap-4">
         {(files || []).map((file, index) => {
           const url = file?.url || file;
           return (
-            <div key={index} className="relative w-24 h-24 rounded-xl overflow-hidden border border-navy/10 shadow-sm bg-slate-100">
+            <div
+              key={`${url}-${index}`}
+              className="relative h-24 w-24 overflow-hidden rounded-xl border border-navy/10 bg-slate-100 shadow-sm dark:border-slate-700 dark:bg-slate-800"
+            >
               {type === "video" ? (
-                <video src={url} className="w-full h-full object-cover" muted />
+                <video src={url} className="h-full w-full object-cover" muted />
               ) : (
-                <img src={url} alt="Uploaded" className="w-full h-full object-cover" />
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={url} alt="Yüklənmiş fayl" className="h-full w-full object-cover" />
               )}
               <button
                 type="button"
                 onClick={() => removeFile(index)}
-                className="absolute top-1 right-1 bg-red-500 text-white p-1 rounded-full text-xs hover:bg-red-600 transition-all"
+                aria-label="Faylı sil"
+                className="absolute right-1 top-1 rounded-full bg-red-500 p-1 text-xs text-white transition-all hover:bg-red-600"
               >
                 <FiX />
               </button>
@@ -97,18 +97,18 @@ export default function MediaUploader({ files = [], setFiles, accept = "image/*"
         })}
 
         <label
-          className={`w-24 h-24 flex flex-col items-center justify-center border-2 border-dashed border-navy/20 rounded-xl bg-slate-50 hover:border-gold hover:bg-gold-50/20 transition-all text-navy/60 ${
-            uploading ? "opacity-60 cursor-wait" : "cursor-pointer"
+          className={`flex h-24 w-24 flex-col items-center justify-center rounded-xl border-2 border-dashed border-navy/20 bg-slate-50 text-navy/60 transition-all hover:border-gold hover:bg-gold-50/20 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:border-copper dark:hover:bg-slate-700 ${
+            uploading ? "cursor-wait opacity-60" : "cursor-pointer"
           }`}
         >
           {uploading ? (
-            <FiLoader className="text-xl mb-1 text-copper animate-spin" />
+            <FiLoader className="mb-1 animate-spin text-xl text-copper" />
           ) : type === "video" ? (
-            <FiVideo className="text-xl mb-1 text-copper" />
+            <FiVideo className="mb-1 text-xl text-copper" />
           ) : (
-            <FiUpload className="text-xl mb-1 text-copper" />
+            <FiUpload className="mb-1 text-xl text-copper" />
           )}
-          <span className="text-[10px] font-medium text-center px-1">
+          <span className="px-1 text-center text-[10px] font-medium">
             {uploading ? "Yüklənir..." : type === "video" ? "Video seç" : "Şəkil seç"}
           </span>
           <input
@@ -122,7 +122,9 @@ export default function MediaUploader({ files = [], setFiles, accept = "image/*"
         </label>
       </div>
 
-      {uploadError && <p className="text-xs text-red-500 font-medium">⚠️ {uploadError}</p>}
+      {uploadError && (
+        <p className="text-xs font-medium text-red-500 dark:text-red-400">⚠️ {uploadError}</p>
+      )}
     </div>
   );
 }

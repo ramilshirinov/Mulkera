@@ -13,6 +13,16 @@ import {
   FiUser, FiCheckCircle, FiPlay, FiLayers, FiBriefcase, FiHeart 
 } from "react-icons/fi";
 
+const PLACEHOLDER = "/images/placeholder-property.svg";
+
+// Faylın uzantısına görə MIME tipi (.mov faylları H.264 olduqda mp4 kimi oxunur)
+function getMime(url = "") {
+  const clean = url.split("?")[0].toLowerCase();
+  if (clean.endsWith(".webm")) return "video/webm";
+  if (clean.endsWith(".ogg") || clean.endsWith(".ogv")) return "video/ogg";
+  return "video/mp4";
+}
+
 export default function ListingDetailPage() {
   const { id } = useParams();
   const router = useRouter();
@@ -22,6 +32,10 @@ export default function ListingDetailPage() {
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState(null);
   const [activeMediaIndex, setActiveMediaIndex] = useState(null);
+
+  // Şəkil qalereyası üçün əlavə state-lər (ListingMedia funksionallığı)
+  const [activeImageTab, setActiveImageTab] = useState(0);
+  const [failed, setFailed] = useState({});
 
   const { isFavorited, toggling, toggleFavorite } = useFavorite(id);
 
@@ -121,9 +135,7 @@ export default function ListingDetailPage() {
   }
 
   const rawPhotos = listing.listing_photos || [];
-  const sortedPhotos = rawPhotos
-    .filter(p => !p.media_type || p.media_type === "image")
-    .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+  const sortedPhotos = rawPhotos.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
 
   const mediaItems = sortedPhotos.length > 0
     ? sortedPhotos
@@ -132,7 +144,13 @@ export default function ListingDetailPage() {
         ...(listing.video_url ? [{ id: 2, url: listing.video_url, media_type: "video" }] : [])
       ];
 
-  const mainImage = mediaItems[0]?.url || "/images/placeholder-property.svg";
+  const items = Array.isArray(mediaItems) ? mediaItems.filter((m) => m?.url) : [];
+  const images = items.filter((m) => m.media_type !== "video");
+  const videos = items.filter((m) => m.media_type === "video");
+
+  const currentImage = images[activeImageTab];
+  const currentSrc = !currentImage || failed[currentImage.url] ? PLACEHOLDER : currentImage.url;
+
   const categoryTitle = listing.categories ? localizedField(listing.categories, "name", locale) : (listing.category || "Əmlak");
   const districtTitle = listing.districts ? localizedField(listing.districts, "name", locale) : "";
 
@@ -191,61 +209,80 @@ export default function ListingDetailPage() {
         </div>
       </div>
 
-      {/* Media / Qalereya */}
-      <div className="mb-10 space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="md:col-span-2 h-[420px] rounded-2xl overflow-hidden shadow-card border border-navy/10 relative cursor-pointer group bg-slate-100">
-            <img 
-              src={mainImage} 
-              alt={listing.title} 
-              className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
-              onClick={() => setActiveMediaIndex(0)}
-            />
-            <div className="absolute bottom-4 right-4 bg-navy/80 text-white text-xs px-3.5 py-2 rounded-xl backdrop-blur-sm flex items-center gap-2 shadow-sm pointer-events-none">
-              <FiMaximize2 /> Tam ekran bax
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 md:grid-cols-1 gap-4 h-[420px]">
-            {mediaItems.slice(1, 3).map((item, index) => (
-              <div 
-                key={item.id || index} 
-                className="h-[202px] rounded-xl overflow-hidden shadow-sm border border-navy/10 relative cursor-pointer group bg-slate-100"
-                onClick={() => setActiveMediaIndex(index + 1)}
-              >
-                {item.media_type === "video" ? (
-                  <div className="w-full h-full flex items-center justify-center bg-navy/90 text-white">
-                    <FiPlay className="text-3xl text-copper" />
-                  </div>
-                ) : (
-                  <img 
-                    src={item.url} 
-                    alt="Thumbnail" 
-                    className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
-                  />
-                )}
+      {/* Media / Qalereya Bloku */}
+      <div className="mb-10 space-y-6">
+        {/* Şəkil qalereyası */}
+        {images.length > 0 && (
+          <div className="space-y-3">
+            <div 
+              className="relative w-full aspect-[16/10] overflow-hidden rounded-2xl bg-slate-100 dark:bg-slate-800 shadow-card border border-navy/10 cursor-pointer group"
+              onClick={() => {
+                // Əgər həmin şəkil tapılıbsa, lightbox-da indeksini tapmaq üçün
+                const globalIndex = mediaItems.findIndex(m => m.url === currentImage?.url);
+                setActiveMediaIndex(globalIndex !== -1 ? globalIndex : 0);
+              }}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={currentSrc}
+                alt={listing.title}
+                className="absolute inset-0 h-full w-full object-cover group-hover:scale-105 transition duration-300"
+                onError={() =>
+                  currentImage && setFailed((f) => ({ ...f, [currentImage.url]: true }))
+                }
+              />
+              <div className="absolute bottom-4 right-4 bg-navy/80 text-white text-xs px-3.5 py-2 rounded-xl backdrop-blur-sm flex items-center gap-2 shadow-sm pointer-events-none">
+                <FiMaximize2 /> Tam ekran bax
               </div>
-            ))}
-          </div>
-        </div>
+            </div>
 
-        {mediaItems.length > 2 && (
-          <div className="flex gap-3 overflow-x-auto pb-2">
-            {mediaItems.map((item, index) => (
-              <button
-                key={item.id || index}
-                onClick={() => setActiveMediaIndex(index)}
-                className="shrink-0 w-24 h-20 rounded-xl overflow-hidden border-2 border-transparent hover:border-copper transition relative cursor-pointer"
-              >
-                {item.media_type === "video" ? (
-                  <div className="w-full h-full bg-navy flex items-center justify-center text-white">
-                    <FiPlay className="text-copper" />
-                  </div>
-                ) : (
-                  <img src={item.url} alt="Gallery thumb" className="w-full h-full object-cover" />
-                )}
-              </button>
-            ))}
+            {images.length > 1 && (
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {images.map((img, i) => (
+                  <button
+                    key={img.url}
+                    type="button"
+                    onClick={() => setActiveImageTab(i)}
+                    className={`relative h-20 w-28 shrink-0 overflow-hidden rounded-xl border-2 transition cursor-pointer ${
+                      i === activeImageTab
+                        ? "border-copper"
+                        : "border-transparent opacity-70 hover:opacity-100"
+                    }`}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={failed[img.url] ? PLACEHOLDER : img.url}
+                      alt={`${listing.title} ${i + 1}`}
+                      className="h-full w-full object-cover"
+                      loading="lazy"
+                    />
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Videolar */}
+        {videos.length > 0 && (
+          <div className="space-y-3">
+            <h3 className="text-lg font-bold font-heading text-navy dark:text-slate-100">
+              Video
+            </h3>
+            <div className="grid grid-cols-1 gap-4">
+              {videos.map((v) => (
+                <video
+                  key={v.url}
+                  controls
+                  preload="metadata"
+                  playsInline
+                  className="w-full aspect-video rounded-xl object-cover bg-black shadow-card border border-navy/10"
+                >
+                  <source src={v.url} type={getMime(v.url)} />
+                  Brauzeriniz video teqini dəstəkləmir.
+                </video>
+              ))}
+            </div>
           </div>
         )}
       </div>
@@ -401,7 +438,7 @@ export default function ListingDetailPage() {
               />
             ) : (
               <img 
-                src={mediaItems[activeMediaIndex]?.url || mainImage} 
+                src={mediaItems[activeMediaIndex]?.url || currentSrc} 
                 alt="Fullscreen view" 
                 className="max-h-[85vh] max-w-[85vw] object-contain rounded-xl shadow-2xl"
               />
