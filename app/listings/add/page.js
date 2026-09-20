@@ -322,8 +322,13 @@ export default function AddListingPage() {
                 latitude={form.latitude}
                 longitude={form.longitude}
                 onChange={(lat, lng) => {
-                  update("latitude", lat);
-                  update("longitude", lng);
+                  if (typeof lat === "object" && lat !== null) {
+                    update("latitude", lat.lat);
+                    update("longitude", lat.lng);
+                  } else {
+                    update("latitude", lat);
+                    update("longitude", lng);
+                  }
                 }}
               />
             </div>

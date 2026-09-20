@@ -83,20 +83,35 @@ export default function ProfilePage() {
       setLoading(false);
     }
 
-    // NOT: "listings" cədvəlində elanı istifadəçiyə bağlayan sütunun adını
-    // öz layihənizə uyğun tənzimləyin (məs. "user_id" və ya "agent_id").
     async function fetchMyListings() {
       setListingsLoading(true);
-      const { data, error } = await supabase
-        .from("listings")
-        .select("*")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false });
+      try {
+        // Məhdudiyyətsiz (single və limit olmadan) istifadəçinin bütün elanlarını gətiririk
+        let { data, error } = await supabase
+          .from("listings")
+          .select("*, listing_photos(*), categories(*), districts(*)")
+          .eq("owner_id", user.id)
+          .order("created_at", { ascending: false });
 
-      if (!error && data) {
-        setMyListings(data);
+        if ((!data || data.length === 0) && !error) {
+          const res = await supabase
+            .from("listings")
+            .select("*, listing_photos(*), categories(*), districts(*)")
+            .eq("user_id", user.id)
+            .order("created_at", { ascending: false });
+          if (res.data && res.data.length > 0) {
+            data = res.data;
+          }
+        }
+
+        if (data) {
+          setMyListings(data);
+        }
+      } catch (err) {
+        console.error("Elanlarım yüklənmədi:", err);
+      } finally {
+        setListingsLoading(false);
       }
-      setListingsLoading(false);
     }
 
     fetchProfile();
@@ -383,18 +398,26 @@ export default function ProfilePage() {
       </form>
 
       {/* Öz Elanlarım Paneli */}
-      <div className="card-surface p-6 sm:p-8 bg-white rounded-2xl shadow-card border border-navy/10 space-y-4">
-        <h2 className="text-xl font-bold font-heading text-navy flex items-center gap-2 border-b border-navy/10 pb-4">
-          <FiHome className="text-copper" /> Mənim Elanlarım
-        </h2>
+      <div className="card-surface p-6 sm:p-8 bg-white dark:bg-slate-900 rounded-2xl shadow-card border border-navy/10 dark:border-slate-800 space-y-4">
+        <div className="flex items-center justify-between border-b border-navy/10 dark:border-slate-800 pb-4">
+          <h2 className="text-xl font-bold font-heading text-navy dark:text-slate-100 flex items-center gap-2">
+            <FiHome className="text-copper" /> Mənim Elanlarım ({myListings.length})
+          </h2>
+          <Link
+            href="/listings/add"
+            className="inline-flex items-center gap-1.5 text-xs font-bold text-copper hover:underline"
+          >
+            + Yeni Elan
+          </Link>
+        </div>
 
         {listingsLoading ? (
-          <p className="text-sm text-navy/60 py-4 text-center">Elanlar yüklənir...</p>
+          <p className="text-sm text-navy/60 dark:text-slate-400 py-4 text-center">Elanlar yüklənir...</p>
         ) : myListings.length === 0 ? (
           <div className="text-center py-8">
-            <p className="text-sm text-navy/60 mb-4">Hələ heç bir elanınız yoxdur.</p>
+            <p className="text-sm text-navy/60 dark:text-slate-400 mb-4">Hələ heç bir elanınız yoxdur.</p>
             <Link
-              href="/listings/new"
+              href="/listings/add"
               className="inline-flex items-center gap-2 rounded-xl bg-navy text-white hover:bg-copper py-2.5 px-5 text-xs font-bold transition"
             >
               İlk Elanınızı Yerləşdirin
@@ -402,50 +425,70 @@ export default function ProfilePage() {
           </div>
         ) : (
           <div className="space-y-3">
-            {myListings.map((item) => (
-              <div
-                key={item.id}
-                className="flex items-center gap-3 rounded-xl border border-navy/10 p-3 hover:border-copper/40 transition"
-              >
-                <div className="w-16 h-16 rounded-lg bg-slate-100 overflow-hidden shrink-0">
-                  {item.image_url ? (
-                    <img src={item.image_url} alt={item.title} className="w-full h-full object-cover" />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-navy/30">
-                      <FiHome />
-                    </div>
-                  )}
-                </div>
+            {myListings.map((item) => {
+              const photoUrl = 
+                item.listing_photos?.find(p => (typeof p === "string" ? p : p?.url) && p?.media_type !== "video")?.url ||
+                item.image_url ||
+                item.cover_image ||
+                item.photos?.[0] ||
+                "/images/placeholder-property.svg";
 
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-navy truncate">{item.title}</p>
-                  <p className="text-xs text-navy/60 mt-0.5">
-                    {item.price?.toLocaleString()} {item.currency || "AZN"}
-                  </p>
-                  <p className="text-[11px] text-navy/40 mt-0.5 flex items-center gap-1">
-                    <FiEye className="inline" /> {item.views || 0} baxış
-                  </p>
-                </div>
+              return (
+                <div
+                  key={item.id}
+                  className="flex items-center gap-3 rounded-xl border border-navy/10 dark:border-slate-800 bg-white dark:bg-slate-800/50 p-3 hover:border-copper/40 transition"
+                >
+                  <div className="w-16 h-16 rounded-lg bg-slate-100 dark:bg-slate-800 overflow-hidden shrink-0">
+                    <img 
+                      src={photoUrl} 
+                      alt={item.title || "Elan"} 
+                      className="w-full h-full object-cover" 
+                      onError={(e) => { e.currentTarget.src = "/images/placeholder-property.svg"; }}
+                    />
+                  </div>
 
-                <div className="flex items-center gap-2 shrink-0">
-                  <Link
-                    href={`/listings/edit/${item.id}`}
-                    className="p-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-navy transition"
-                    title="Redaktə et"
-                  >
-                    <FiEdit2 className="text-sm" />
-                  </Link>
-                  <button
-                    type="button"
-                    onClick={() => handleDeleteListing(item.id)}
-                    className="p-2 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 transition"
-                    title="Sil"
-                  >
-                    <FiTrash2 className="text-sm" />
-                  </button>
+                  <div className="flex-1 min-w-0">
+                    <Link 
+                      href={`/listings/${item.id}`}
+                      className="text-sm font-semibold text-navy dark:text-slate-100 hover:text-copper transition truncate block"
+                    >
+                      {item.title_az || item.title || "Elan #" + item.id}
+                    </Link>
+                    <p className="text-xs font-bold text-copper mt-0.5">
+                      {Number(item.price || 0).toLocaleString()} {item.currency || "AZN"}
+                    </p>
+                    <p className="text-[11px] text-navy/40 dark:text-slate-400 mt-0.5 flex items-center gap-1">
+                      <FiEye className="inline" /> {item.views || item.views_count || 0} baxış
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Link
+                      href={`/listings/${item.id}`}
+                      className="p-2 rounded-lg bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-navy dark:text-slate-200 transition"
+                      title="Bax"
+                    >
+                      <FiEye className="text-sm" />
+                    </Link>
+                    <Link
+                      href={`/listings/${item.id}/edit`}
+                      className="p-2 rounded-lg bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-navy dark:text-slate-200 transition"
+                      title="Redaktə et"
+                    >
+                      <FiEdit2 className="text-sm" />
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteListing(item.id)}
+                      className="p-2 rounded-lg bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 text-rose-600 dark:text-rose-400 transition cursor-pointer"
+                      title="Sil"
+                    >
+                      <FiTrash2 className="text-sm" />
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useApp } from "@/context/AppContext";
 import { localizedField } from "@/lib/listings";
+import { PROPERTY_CATEGORIES } from "@/constants/categories";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { 
@@ -14,7 +15,8 @@ import {
   FiEye, 
   FiDollarSign, 
   FiCrosshair, 
-  FiList 
+  FiList,
+  FiRotateCcw
 } from "react-icons/fi";
 
 // Leaflet xəritəsini SSR xətası verməməsi üçün dinamik import edirik
@@ -31,7 +33,7 @@ const PLACEHOLDER = "/images/placeholder-property.svg";
 
 const TX_FILTERS = [
   { id: "all", label: "Hamısı", match: () => true },
-  { id: "sale", label: "Satlıq", match: (t) => t === "sale" },
+  { id: "sale", label: "Satış", match: (t) => t === "sale" },
   {
     id: "rent",
     label: "Kirayə",
@@ -108,6 +110,7 @@ export default function MapPage() {
   const router = useRouter();
 
   const [listings, setListings] = useState([]);
+  const [allCategories, setAllCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [leafletModules, setLeafletModules] = useState(null);
@@ -115,6 +118,7 @@ export default function MapPage() {
   // Filtrlər
   const [txFilter, setTxFilter] = useState("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
+  const [roomsFilter, setRoomsFilter] = useState("all");
   const [minPrice, setMinPrice] = useState("");
   const [maxPrice, setMaxPrice] = useState("");
 
@@ -134,6 +138,24 @@ export default function MapPage() {
       setLeafletModules(L);
     });
   }, []);
+
+  // Kateqoriyaların yüklənməsi
+  useEffect(() => {
+    if (!supabase) return;
+    supabase
+      .from("categories")
+      .select("*")
+      .then(({ data }) => {
+        if (data && data.length > 0) {
+          setAllCategories(data);
+        } else {
+          setAllCategories(PROPERTY_CATEGORIES);
+        }
+      })
+      .catch(() => {
+        setAllCategories(PROPERTY_CATEGORIES);
+      });
+  }, [supabase]);
 
   // Elanların yüklənməsi
   useEffect(() => {
@@ -162,41 +184,76 @@ export default function MapPage() {
     };
   }, [supabase]);
 
-  // Koordinatı olan elanların emalı
+  // Bütün elanların koordinat ilə xəritəyə yerləşdirilməsi
   const mapped = useMemo(
     () =>
-      listings
-        .map((l) => ({
+      listings.map((l, index) => {
+        let lat = toCoord(l.latitude ?? l.lat);
+        let lng = toCoord(l.longitude ?? l.lng ?? l.lon);
+
+        // Əgər koordinat qeyd olunmayıbsa, xəritədə görünməsi üçün Bakı mərkəzindən səliqəli yerləşdirilir
+        if (lat === null || lng === null) {
+          const seed = (typeof l.id === "number" ? l.id : index + 1) * 0.017;
+          lat = BAKU_CENTER[0] + Math.sin(seed) * 0.035;
+          lng = BAKU_CENTER[1] + Math.cos(seed) * 0.045;
+        }
+
+        return {
           ...l,
-          _lat: toCoord(l.latitude ?? l.lat),
-          _lng: toCoord(l.longitude ?? l.lng ?? l.lon),
-        }))
-        .filter((l) => l._lat !== null && l._lng !== null),
+          _lat: lat,
+          _lng: lng,
+        };
+      }),
     [listings]
   );
 
-  // Kateqoriya çipləri
-  const categoryChips = useMemo(() => {
-    const seen = new Map();
-    mapped.forEach((l) => {
-      if (l.category_id && l.categories && !seen.has(l.category_id)) {
-        seen.set(l.category_id, localizedField(l.categories, "name", currentLocale));
-      }
-    });
-    return Array.from(seen, ([id, name]) => ({ id: String(id), name }));
-  }, [mapped, currentLocale]);
+  // Kateqoriya seçimləri (DB və ya fallback kateqoriyaları)
+  const categoryOptions = useMemo(() => {
+    if (allCategories && allCategories.length > 0) {
+      return allCategories.map((c) => ({
+        id: String(c.id),
+        slug: c.slug || String(c.id),
+        name: localizedField(c, "name", currentLocale) || c.name || c.name_az,
+      }));
+    }
+    return PROPERTY_CATEGORIES.map((c) => ({
+      id: c.id,
+      slug: c.slug,
+      name: c.name,
+    }));
+  }, [allCategories, currentLocale]);
 
-  // Filtrləmə məntiqi
+  // Filtrləmə məntiqi (Satış/Kirayə, Əmlak növü, Qiymət, Otaq)
   let filtered = useMemo(() => {
     const tx = TX_FILTERS.find((f) => f.id === txFilter) || TX_FILTERS[0];
     return mapped.filter((l) => {
+      // 1. Əməliyyat növü (Satış / Kirayə)
       if (!tx.match(l.transaction_type)) return false;
-      if (categoryFilter !== "all" && String(l.category_id) !== categoryFilter) return false;
+
+      // 2. Əmlak növü / Kateqoriya
+      if (categoryFilter !== "all") {
+        const matchesCategory =
+          String(l.category_id) === categoryFilter ||
+          l.categories?.slug === categoryFilter ||
+          String(l.property_type).toLowerCase() === categoryFilter.toLowerCase();
+        if (!matchesCategory) return false;
+      }
+
+      // 3. Qiymət aralığı
       if (minPrice && Number(l.price) < Number(minPrice)) return false;
       if (maxPrice && Number(l.price) > Number(maxPrice)) return false;
+
+      // 4. Otaq sayı
+      if (roomsFilter !== "all") {
+        const rc = Number(l.room_count || l.rooms || 0);
+        if (roomsFilter === "4+" ? rc < 4 : rc !== Number(roomsFilter)) {
+          return false;
+        }
+      }
+
       return true;
     });
-  }, [mapped, txFilter, categoryFilter, minPrice, maxPrice]);
+  }, [mapped, txFilter, categoryFilter, roomsFilter, minPrice, maxPrice]);
 
   // Məsafəyə görə hesablama və sıralama
   if (userPosition) {
@@ -232,10 +289,19 @@ export default function MapPage() {
     );
   };
 
-  const chipBase = "px-3.5 py-1.5 rounded-full text-xs font-semibold transition border";
-  const chipOn = "bg-navy text-white border-navy dark:bg-copper dark:border-copper";
+  const handleResetFilters = () => {
+    setTxFilter("all");
+    setCategoryFilter("all");
+    setRoomsFilter("all");
+    setMinPrice("");
+    setMaxPrice("");
+    setSortByDistance(false);
+  };
+
+  const chipBase = "px-3.5 py-1.5 rounded-full text-xs font-semibold transition border whitespace-nowrap";
+  const chipOn = "bg-navy text-white border-navy dark:bg-copper dark:border-copper shadow-sm";
   const chipOff =
-    "bg-white dark:bg-slate-800 text-navy dark:text-slate-200 border-navy/15 dark:border-slate-600 hover:border-copper hover:text-copper";
+    "bg-white dark:bg-slate-800 text-navy dark:text-slate-200 border-navy/15 dark:border-slate-700 hover:border-copper hover:text-copper";
 
   return (
     <div className="flex flex-col h-[calc(100vh-5rem)] w-full relative isolate">
@@ -255,9 +321,9 @@ export default function MapPage() {
           <button
             type="button"
             onClick={() => setPanelOpen((prev) => !prev)}
-            className="flex items-center gap-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 px-3 py-2 text-xs font-semibold text-navy dark:text-slate-200 hover:bg-slate-200 transition"
+            className="flex items-center gap-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 px-3 py-2 text-xs font-semibold text-navy dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 transition cursor-pointer"
           >
-            <FiFilter className="text-copper" /> {panelOpen ? "Filtrləri Gizlə" : "Filtrləri Göstər"}
+            <FiFilter className="text-copper" /> {panelOpen ? "Filtrləri Gizlə" : "Filtrlər"}
           </button>
         </div>
 
@@ -269,16 +335,16 @@ export default function MapPage() {
               type="number"
               value={minPrice}
               onChange={(e) => setMinPrice(e.target.value)}
-              placeholder="Min"
-              className="w-16 bg-transparent text-xs outline-none text-navy dark:text-slate-200"
+              placeholder="Min AZN"
+              className="w-20 bg-transparent text-xs outline-none text-navy dark:text-slate-200"
             />
             <span className="text-navy/30 dark:text-slate-500 text-xs">-</span>
             <input
               type="number"
               value={maxPrice}
               onChange={(e) => setMaxPrice(e.target.value)}
-              placeholder="Max"
-              className="w-16 bg-transparent text-xs outline-none text-navy dark:text-slate-200"
+              placeholder="Max AZN"
+              className="w-20 bg-transparent text-xs outline-none text-navy dark:text-slate-200"
             />
           </div>
 
@@ -286,7 +352,7 @@ export default function MapPage() {
             type="button"
             onClick={handleFindMyLocation}
             disabled={locating}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-navy dark:text-slate-200 hover:bg-slate-200 transition shrink-0 cursor-pointer"
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-navy dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 transition shrink-0 cursor-pointer"
           >
             <FiCrosshair /> {locating ? "Axtarılır..." : "Ətrafımı Tap"}
           </button>
@@ -295,10 +361,10 @@ export default function MapPage() {
             type="button"
             onClick={() => setShowListPanel((prev) => !prev)}
             className={`hidden md:flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold transition shrink-0 cursor-pointer ${
-              showListPanel ? "bg-navy text-white shadow-sm" : "bg-slate-100 dark:bg-slate-800 text-navy dark:text-slate-200 hover:bg-slate-200"
+              showListPanel ? "bg-navy text-white shadow-sm" : "bg-slate-100 dark:bg-slate-800 text-navy dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700"
             }`}
           >
-            <FiList /> Siyahı
+            <FiList /> Siyahı ({filtered.length})
           </button>
         </div>
       </div>
@@ -306,40 +372,58 @@ export default function MapPage() {
       {/* Əsas Sahə: Siyahı Paneli + Xəritə */}
       <div className="flex-1 w-full relative z-0 flex overflow-hidden">
         
-        {/* Sol Tərəfdən Açılan Sürətli Filtr Paneli */}
+        {/* Sol Tərəfdən Açılan Geniş Filtrləmə Paneli (Satış / Kirayə, Əmlak növü, Otaq sayı) */}
         {panelOpen && (
-          <div className="absolute left-3 top-3 z-[1000] w-[340px] max-w-[calc(100%-1.5rem)] space-y-3 rounded-2xl bg-white/95 dark:bg-slate-900/95 p-4 shadow-xl backdrop-blur border border-navy/10 dark:border-slate-700">
-            <div className="flex items-center justify-between">
-              <span className="flex items-center gap-2 text-sm font-bold text-navy dark:text-slate-100">
-                <FiFilter className="text-copper" /> Sürətli filtr
+          <div className="absolute left-3 top-3 z-[1000] w-[360px] max-w-[calc(100%-1.5rem)] max-h-[calc(100%-1.5rem)] overflow-y-auto space-y-4 rounded-2xl bg-white/95 dark:bg-slate-900/95 p-5 shadow-2xl backdrop-blur border border-navy/10 dark:border-slate-700">
+            <div className="flex items-center justify-between border-b border-navy/10 dark:border-slate-800 pb-3">
+              <span className="flex items-center gap-2 text-sm font-bold text-navy dark:text-slate-100 font-heading">
+                <FiFilter className="text-copper" /> Filtrlər və Axtarış
               </span>
-              <button
-                type="button"
-                onClick={() => setPanelOpen(false)}
-                aria-label="Bağla"
-                className="rounded-full p-1 text-navy/60 dark:text-slate-400 hover:text-copper cursor-pointer"
-              >
-                <FiX />
-              </button>
-            </div>
-
-            {/* Əməliyyat növü çipləri */}
-            <div className="flex flex-wrap gap-2">
-              {TX_FILTERS.map((f) => (
+              <div className="flex items-center gap-2">
                 <button
-                  key={f.id}
                   type="button"
-                  onClick={() => setTxFilter(f.id)}
-                  className={`${chipBase} ${txFilter === f.id ? chipOn : chipOff} cursor-pointer`}
+                  onClick={handleResetFilters}
+                  title="Filtrləri sıfırla"
+                  className="text-xs text-navy/50 dark:text-slate-400 hover:text-copper flex items-center gap-1 cursor-pointer"
                 >
-                  {f.label}
+                  <FiRotateCcw className="text-xs" /> Sıfırla
                 </button>
-              ))}
+                <button
+                  type="button"
+                  onClick={() => setPanelOpen(false)}
+                  aria-label="Bağla"
+                  className="rounded-full p-1 text-navy/60 dark:text-slate-400 hover:text-copper cursor-pointer"
+                >
+                  <FiX />
+                </button>
+              </div>
             </div>
 
-            {/* Kateqoriya çipləri */}
-            {categoryChips.length > 0 && (
-              <div className="flex flex-wrap gap-2 border-t border-navy/10 dark:border-slate-700 pt-3">
+            {/* 1. Əməliyyat növü (Satış / Kirayə) */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-navy/80 dark:text-slate-300 block">
+                Əməliyyat Növü
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {TX_FILTERS.map((f) => (
+                  <button
+                    key={f.id}
+                    type="button"
+                    onClick={() => setTxFilter(f.id)}
+                    className={`${chipBase} ${txFilter === f.id ? chipOn : chipOff} cursor-pointer`}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* 2. Əmlak növü (Property Type) */}
+            <div className="space-y-1.5 border-t border-navy/10 dark:border-slate-800 pt-3">
+              <label className="text-xs font-bold text-navy/80 dark:text-slate-300 block">
+                Əmlak Növü
+              </label>
+              <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto pr-1">
                 <button
                   type="button"
                   onClick={() => setCategoryFilter("all")}
@@ -347,7 +431,7 @@ export default function MapPage() {
                 >
                   Bütün növlər
                 </button>
-                {categoryChips.map((c) => (
+                {categoryOptions.map((c) => (
                   <button
                     key={c.id}
                     type="button"
@@ -358,15 +442,58 @@ export default function MapPage() {
                   </button>
                 ))}
               </div>
-            )}
+            </div>
 
-            <p className="text-xs font-medium text-navy/60 dark:text-slate-400 pt-1">
-              {loading
-                ? "Yüklənir..."
-                : error
-                ? error
-                : `Xəritədə ${filtered.length} elan göstərilir`}
-            </p>
+            {/* 3. Otaq sayı */}
+            <div className="space-y-1.5 border-t border-navy/10 dark:border-slate-800 pt-3">
+              <label className="text-xs font-bold text-navy/80 dark:text-slate-300 block">
+                Otaq Sayı
+              </label>
+              <div className="flex gap-1.5">
+                {["all", "1", "2", "3", "4+"].map((r) => (
+                  <button
+                    key={r}
+                    type="button"
+                    onClick={() => setRoomsFilter(r)}
+                    className={`flex-1 py-1.5 rounded-xl text-xs font-semibold text-center transition border ${
+                      roomsFilter === r ? chipOn : chipOff
+                    } cursor-pointer`}
+                  >
+                    {r === "all" ? "Hər" : r}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* 4. Qiymət filtri */}
+            <div className="space-y-1.5 border-t border-navy/10 dark:border-slate-800 pt-3 sm:hidden">
+              <label className="text-xs font-bold text-navy/80 dark:text-slate-300 block">
+                Qiymət Aralığı (AZN)
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  placeholder="Min"
+                  value={minPrice}
+                  onChange={(e) => setMinPrice(e.target.value)}
+                  className="w-1/2 p-2 rounded-xl border border-navy/15 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs text-navy dark:text-slate-100 outline-none"
+                />
+                <input
+                  type="number"
+                  placeholder="Max"
+                  value={maxPrice}
+                  onChange={(e) => setMaxPrice(e.target.value)}
+                  className="w-1/2 p-2 rounded-xl border border-navy/15 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs text-navy dark:text-slate-100 outline-none"
+                />
+              </div>
+            </div>
+
+            <div className="pt-2 border-t border-navy/10 dark:border-slate-800 flex items-center justify-between">
+              <span className="text-xs font-bold text-navy dark:text-slate-200">
+                Xəritədə: <strong className="text-copper">{filtered.length}</strong> elan
+              </span>
+              {loading && <span className="text-xs text-navy/50 dark:text-slate-400">Yüklənir...</span>}
+            </div>
           </div>
         )}
 
@@ -379,9 +506,18 @@ export default function MapPage() {
               </div>
             )}
             {loading ? (
-              <p className="text-sm text-navy/60 p-4 text-center">Yüklənir...</p>
+              <p className="text-sm text-navy/60 dark:text-slate-400 p-4 text-center">Elanlar yüklənir...</p>
             ) : filtered.length === 0 ? (
-              <p className="text-sm text-navy/60 p-4 text-center">Filtrə uyğun elan tapılmadı.</p>
+              <div className="text-center p-6 space-y-2">
+                <p className="text-sm text-navy/60 dark:text-slate-400">Filtrə uyğun elan tapılmadı.</p>
+                <button
+                  type="button"
+                  onClick={handleResetFilters}
+                  className="text-xs font-bold text-copper underline cursor-pointer"
+                >
+                  Filtrləri sıfırla
+                </button>
+              </div>
             ) : (
               filtered.map((item) => {
                 const photo =
@@ -393,17 +529,20 @@ export default function MapPage() {
                   <button
                     key={item.id}
                     onClick={() => setFlyTarget({ lat: item._lat, lng: item._lng })}
-                    className="flex items-center gap-3 p-3 border-b border-navy/5 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition text-left w-full cursor-pointer"
+                    className="flex items-center gap-3 p-3 border-b border-navy/5 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition text-left w-full cursor-pointer group"
                   >
-                    <div className="w-14 h-14 rounded-lg bg-slate-100 dark:bg-slate-800 overflow-hidden shrink-0">
-                      <img src={photo} alt="" className="w-full h-full object-cover" />
+                    <div className="w-16 h-16 rounded-lg bg-slate-100 dark:bg-slate-800 overflow-hidden shrink-0">
+                      <img src={photo} alt="" className="w-full h-full object-cover group-hover:scale-105 transition" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs font-semibold text-navy dark:text-slate-200 truncate">
+                      <p className="text-xs font-semibold text-navy dark:text-slate-200 truncate group-hover:text-copper transition">
                         {localizedField(item, "title", currentLocale) || item.title}
                       </p>
-                      <p className="text-[11px] text-navy/60 dark:text-slate-400 mt-0.5 font-bold">
+                      <p className="text-xs text-navy dark:text-slate-100 mt-0.5 font-extrabold">
                         {Number(item.price || 0).toLocaleString()} {item.currency || "AZN"}
+                      </p>
+                      <p className="text-[11px] text-navy/50 dark:text-slate-400 mt-0.5">
+                        {item.room_count ? `${item.room_count} otaq · ` : ""}{item.area_m2 ? `${item.area_m2} m²` : ""}
                       </p>
                       {item._distanceKm !== undefined && (
                         <p className="text-[10px] text-copper font-medium mt-0.5">
@@ -458,7 +597,6 @@ export default function MapPage() {
                     item.image_url ||
                     PLACEHOLDER;
 
-                  // 1-ci kodun xüsusi qiymət etiketi (divIcon) dizaynı
                   const customDivIcon = leafletModules.divIcon({
                     className: "mulkera-marker",
                     html: `<div class="flex h-7 w-full items-center justify-center rounded-full border-2 border-white ${markerColor(
@@ -480,7 +618,7 @@ export default function MapPage() {
                     >
                       <Popup>
                         <div className="w-52 p-1">
-                          <div className="h-28 w-full rounded-lg overflow-hidden mb-2 bg-slate-100">
+                          <div className="h-28 w-full rounded-lg overflow-hidden mb-2 bg-slate-100 dark:bg-slate-800">
                             <img src={photo} alt="" className="w-full h-full object-cover" />
                           </div>
                           <div className="font-extrabold text-sm text-navy mb-0.5">

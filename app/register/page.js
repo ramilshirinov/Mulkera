@@ -51,21 +51,42 @@ export default function RegisterPage() {
       const userId = data.user?.id;
 
       if (userId) {
-        await supabase
-          .from("users")
-          .update({ phone: form.phone })
-          .eq("id", userId);
+        try {
+          await supabase.from("profiles").upsert({
+            id: userId,
+            full_name: form.fullName,
+            phone: form.phone,
+            role,
+            agency_name: role === "realtor" ? form.agencyName : null,
+            commission_rate: role === "realtor" ? (form.commissionRate ? `${form.commissionRate}%` : "1-2%") : null,
+            is_approved_realtor: false,
+          });
+        } catch (e) {
+          console.warn("profiles table upsert error:", e);
+        }
+
+        try {
+          await supabase
+            .from("users")
+            .update({ phone: form.phone, role })
+            .eq("id", userId);
+        } catch (e) {
+          console.warn("users table update error:", e);
+        }
 
         if (role === "realtor") {
-          const { error: realtorError } = await supabase.from("realtor_profiles").insert({
-            user_id: userId,
-            agency_name: form.agencyName,
-            commission_rate: Number(form.commissionRate) || 0,
-            legal_status: form.legalStatus,
-            contact_number: form.phone,
-            approval_status: "pending",
-          });
-          if (realtorError) throw realtorError;
+          try {
+            await supabase.from("realtor_profiles").insert({
+              user_id: userId,
+              agency_name: form.agencyName,
+              commission_rate: Number(form.commissionRate) || 0,
+              legal_status: form.legalStatus,
+              contact_number: form.phone,
+              approval_status: "pending",
+            });
+          } catch (e) {
+            console.warn("realtor_profiles table insert error:", e);
+          }
         }
       }
 

@@ -56,17 +56,18 @@ export default function EditListingPage() {
         setLoading(false);
         return;
       }
-      if (user && data.owner_id !== user.id) {
+      const ownerId = data.owner_id || data.user_id;
+      if (user && ownerId && ownerId !== user.id && user.role !== "admin") {
         setNotAllowed(true);
         setLoading(false);
         return;
       }
 
       setForm({
-        title_az: data.title_az || "",
+        title_az: data.title_az || data.title || "",
         title_ru: data.title_ru || "",
         title_en: data.title_en || "",
-        description_az: data.description_az || "",
+        description_az: data.description_az || data.description || "",
         description_ru: data.description_ru || "",
         description_en: data.description_en || "",
         category_id: data.category_id || "",
@@ -86,15 +87,23 @@ export default function EditListingPage() {
         documents: data.documents || [],
       });
 
-      const existingPhotos = (data.listing_photos || [])
+      let existingPhotos = (data.listing_photos || [])
         .filter((p) => p.media_type === "image")
         .sort((a, b) => a.sort_order - b.sort_order)
         .map((p) => ({ url: p.url, name: "existing", type: "image" }));
+
+      if (existingPhotos.length === 0 && data.image_url) {
+        existingPhotos = [{ url: data.image_url, name: "existing", type: "image" }];
+      }
         
-      const existingVideos = (data.listing_photos || [])
+      let existingVideos = (data.listing_photos || [])
         .filter((p) => p.media_type === "video")
         .sort((a, b) => a.sort_order - b.sort_order)
         .map((p) => ({ url: p.url, name: "existing", type: "video" }));
+
+      if (existingVideos.length === 0 && data.video_url) {
+        existingVideos = [{ url: data.video_url, name: "existing", type: "video" }];
+      }
 
       setImageFiles(existingPhotos);
       setVideoFiles(existingVideos);
@@ -139,13 +148,15 @@ export default function EditListingPage() {
     try {
       const payload = {
         title_az: form.title_az,
+        title: form.title_az,
         title_ru: form.title_ru || null,
         title_en: form.title_en || null,
         description_az: form.description_az,
+        description: form.description_az,
         description_ru: form.description_ru || null,
         description_en: form.description_en || null,
-        category_id: Number(form.category_id),
-        district_id: Number(form.district_id),
+        category_id: form.category_id ? Number(form.category_id) : null,
+        district_id: form.district_id ? Number(form.district_id) : null,
         transaction_type: form.transaction_type,
         price: Number(form.price),
         currency: form.currency,
@@ -333,8 +344,13 @@ export default function EditListingPage() {
                 latitude={form.latitude}
                 longitude={form.longitude}
                 onChange={(lat, lng) => {
-                  update("latitude", lat);
-                  update("longitude", lng);
+                  if (typeof lat === "object" && lat !== null) {
+                    update("latitude", lat.lat);
+                    update("longitude", lat.lng);
+                  } else {
+                    update("latitude", lat);
+                    update("longitude", lng);
+                  }
                 }}
               />
             </div>

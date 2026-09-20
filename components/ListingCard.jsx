@@ -13,10 +13,27 @@ export default function ListingCard({ listing }) {
   const currentLocale = locale || language || "az";
   const [imgError, setImgError] = useState(false);
 
-  // Şəklin təyini: listing_photos massivindən, köhnə image_url-dən və ya placeholder-dən istifadə edirik
-  const photos = Array.isArray(listing.listing_photos) ? listing.listing_photos : [];
-  const firstImage = photos.find((p) => p?.url && p.media_type !== "video");
-  const rawPhoto = firstImage?.url || listing.image_url || "";
+  // Şəklin etibarlı təyini: listing_photos, photos, images, image_url və s. yoxlanılır
+  const rawPhoto = (() => {
+    if (!listing) return "";
+    if (Array.isArray(listing.listing_photos) && listing.listing_photos.length > 0) {
+      const found = listing.listing_photos.find((p) => {
+        const u = typeof p === "string" ? p : p?.url;
+        const type = typeof p === "object" ? p?.media_type : null;
+        return !!u && type !== "video" && !u.match(/\.(mp4|webm|mov)$/i);
+      });
+      if (found) return typeof found === "string" ? found : found.url;
+    }
+    if (Array.isArray(listing.photos) && listing.photos.length > 0) {
+      const first = listing.photos[0];
+      return typeof first === "string" ? first : first?.url || "";
+    }
+    if (Array.isArray(listing.images) && listing.images.length > 0) {
+      const first = listing.images[0];
+      return typeof first === "string" ? first : first?.url || "";
+    }
+    return listing.image_url || listing.cover_image || listing.photo_url || "";
+  })();
   
   // Əgər şəkil yoxdursa və ya xəta baş veribsə placeholder göstəriləcək
   const mainPhoto = imgError || !rawPhoto ? PLACEHOLDER : rawPhoto;

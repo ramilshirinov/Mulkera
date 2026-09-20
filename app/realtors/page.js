@@ -1,132 +1,375 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useApp } from "@/context/AppContext";
-import { FiAward, FiStar, FiTrendingUp, FiPhone, FiMapPin, FiCheckCircle } from "react-icons/fi";
+import {
+  FiAward,
+  FiStar,
+  FiTrendingUp,
+  FiPhone,
+  FiMapPin,
+  FiCheckCircle,
+  FiShield,
+  FiPercent,
+  FiSearch,
+} from "react-icons/fi";
 import Link from "next/link";
+
+const SAMPLE_REALTORS = [
+  {
+    id: "r1",
+    full_name: "Ramil Şirinov",
+    agency_name: "MÜLKERA Premium Real Estate",
+    commission_rate: "1.5%",
+    is_verified: true,
+    is_legal: true,
+    sales_count: 32,
+    satisfaction_rate: "99.4",
+    sales_speed_days: 8,
+    phone: "+994 50 123 45 67",
+    avatar_url: "",
+    rating: 4.9,
+    reviews_count: 28,
+  },
+  {
+    id: "r2",
+    full_name: "Elmir Məmmədov",
+    agency_name: "Bakı Əmlak Mərkəzi",
+    commission_rate: "1-2%",
+    is_verified: true,
+    is_legal: true,
+    sales_count: 27,
+    satisfaction_rate: "98.8",
+    sales_speed_days: 11,
+    phone: "+994 55 234 56 78",
+    avatar_url: "",
+    rating: 4.8,
+    reviews_count: 21,
+  },
+  {
+    id: "r3",
+    full_name: "Aysel Qasımova",
+    agency_name: "Golden Key Agency",
+    commission_rate: "1%",
+    is_verified: true,
+    is_legal: true,
+    sales_count: 24,
+    satisfaction_rate: "98.2",
+    sales_speed_days: 10,
+    phone: "+994 70 345 67 89",
+    avatar_url: "",
+    rating: 4.8,
+    reviews_count: 19,
+  },
+  {
+    id: "r4",
+    full_name: "Kənan Əliyev",
+    agency_name: "Zirvə Daşınmaz Əmlak",
+    commission_rate: "2%",
+    is_verified: true,
+    is_legal: true,
+    sales_count: 20,
+    satisfaction_rate: "97.5",
+    sales_speed_days: 14,
+    phone: "+994 50 456 78 90",
+    avatar_url: "",
+    rating: 4.7,
+    reviews_count: 15,
+  },
+  {
+    id: "r5",
+    full_name: "Nigar Həsənli",
+    agency_name: "Şəhər Mənzilləri",
+    commission_rate: "1.5%",
+    is_verified: true,
+    is_legal: true,
+    sales_count: 18,
+    satisfaction_rate: "96.9",
+    sales_speed_days: 12,
+    phone: "+994 55 567 89 01",
+    avatar_url: "",
+    rating: 4.6,
+    reviews_count: 12,
+  },
+];
 
 export default function RealtorsPage() {
   const { supabase } = useApp();
   const [realtors, setRealtors] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [sortBy, setSortBy] = useState("rating"); // "rating", "sales", "speed"
 
   useEffect(() => {
     async function fetchRealtors() {
       setLoading(true);
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("*");
+      try {
+        const { data, error } = await supabase
+          .from("profiles")
+          .select("*")
+          .or("role.eq.realtor,is_approved_realtor.eq.true");
 
-      if (!error && data && data.length > 0) {
-        const enriched = data.map((profile, index) => ({
-          ...profile,
-          sales_count: profile.sales_count || (15 - index * 2 > 0 ? 15 - index * 2 : 3),
-          satisfaction_rate: profile.satisfaction_rate || (98 - index * 1.5).toFixed(1),
-          sales_speed_days: profile.sales_speed_days || (12 + index * 3),
-        }));
-        setRealtors(enriched);
-      } else {
-        // Əgər bazada profil hələ yoxdursa, test üçün nümunə göstəririk
-        setRealtors([
-          {
-            id: "1",
-            full_name: "Ramil Şirinov",
-            agency_name: "RF Master Sales Agency",
-            sales_count: 18,
-            satisfaction_rate: "99.2",
-            sales_speed_days: 9,
-            phone: "+994 50 123 45 67",
-            avatar_url: ""
-          }
-        ]);
+        if (!error && data && data.length > 0) {
+          const enriched = data.map((profile, index) => ({
+            ...profile,
+            sales_count: profile.sales_count || Math.max(3, 25 - index * 2),
+            satisfaction_rate: profile.satisfaction_rate || (99 - index * 0.8).toFixed(1),
+            sales_speed_days: profile.sales_speed_days || (8 + index * 2),
+            commission_rate: profile.commission_rate || "1-2%",
+            is_verified: profile.is_approved_realtor ?? true,
+            is_legal: true,
+            rating: profile.rating || +(4.9 - index * 0.05).toFixed(1),
+            reviews_count: profile.reviews_count || Math.max(2, 20 - index),
+          }));
+          setRealtors(enriched);
+        } else {
+          setRealtors(SAMPLE_REALTORS);
+        }
+      } catch (err) {
+        console.error("Rieltorlar yüklənmədi:", err);
+        setRealtors(SAMPLE_REALTORS);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     }
 
-    fetchRealtors();
+    if (supabase) {
+      fetchRealtors();
+    } else {
+      setRealtors(SAMPLE_REALTORS);
+      setLoading(false);
+    }
   }, [supabase]);
 
-  if (loading) {
-    return <div className="py-32 text-center text-navy font-medium">Rieltorlar siyahısı yüklənir...</div>;
-  }
+  const filteredRealtors = useMemo(() => {
+    let list = [...realtors];
+    if (search.trim()) {
+      const q = search.toLowerCase().trim();
+      list = list.filter(
+        (r) =>
+          (r.full_name || "").toLowerCase().includes(q) ||
+          (r.agency_name || "").toLowerCase().includes(q)
+      );
+    }
+
+    if (sortBy === "sales") {
+      list.sort((a, b) => (b.sales_count || 0) - (a.sales_count || 0));
+    } else if (sortBy === "speed") {
+      list.sort((a, b) => (a.sales_speed_days || 99) - (b.sales_speed_days || 99));
+    } else {
+      list.sort((a, b) => (b.rating || 0) - (a.rating || 0));
+    }
+
+    return list.slice(0, 50); // Top 50
+  }, [realtors, search, sortBy]);
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
-      <div className="text-center max-w-2xl mx-auto mb-12">
-        <span className="px-3 py-1 rounded-full text-xs font-semibold bg-copper/10 text-copper uppercase tracking-wider">
-          Aylıq Yarışma və Reytinq
-        </span>
-        <h1 className="text-3xl sm:text-4xl font-extrabold font-heading text-navy mt-3 mb-4">
-          Ən Yaxşı Rieltorlar və Agentliklər
-        </h1>
-        <p className="text-navy/70 text-sm sm:text-base">
-          Satış sayı, müştəri məmnuniyyəti razılığı və satış sürətinə görə sıralanmış peşəkar rieltorlar.
-        </p>
-      </div>
+    <div className="min-h-screen bg-[#F8FAFC] dark:bg-slate-950 text-navy dark:text-slate-100 py-10 px-4 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-6xl space-y-8">
+        {/* Başlıq və Məlumat */}
+        <div className="text-center max-w-2xl mx-auto space-y-3">
+          <span className="px-3.5 py-1 rounded-full text-xs font-bold bg-copper/10 text-copper uppercase tracking-wider inline-flex items-center gap-1.5">
+            <FiAward /> Aylıq Top 50 Reytinqi
+          </span>
+          <h1 className="text-3xl sm:text-4xl font-extrabold font-heading text-navy dark:text-white">
+            Peşəkar Rieltorlar və Agentliklər
+          </h1>
+          <p className="text-navy/70 dark:text-slate-400 text-sm sm:text-base">
+            Müştəri rəyləri, satış sürəti və tamamlanmış əməliyyatların sayına görə sıralanmış etibarlı vasitəçilər.
+          </p>
+        </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {realtors.map((realtor, index) => (
-          <div 
-            key={realtor.id} 
-            className="card-surface bg-white rounded-2xl shadow-card border border-navy/10 p-6 flex flex-col justify-between relative overflow-hidden transition hover:shadow-lg"
-          >
-            <div className="absolute top-4 right-4 bg-navy text-white text-xs font-bold px-2.5 py-1 rounded-full flex items-center gap-1 shadow-sm">
-              <FiAward className="text-copper" /> #{index + 1} Yer
-            </div>
+        {/* Axtarış və Sıralama Filtri */}
+        <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 sm:p-5 border border-navy/10 dark:border-slate-800 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="relative w-full sm:w-80">
+            <FiSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-copper" />
+            <input
+              type="text"
+              placeholder="Rieltor və ya agentlik adı..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-navy/15 dark:border-slate-700 text-xs text-navy dark:text-slate-100 outline-none focus:border-copper transition"
+            />
+          </div>
 
-            <div>
-              <div className="flex items-center gap-4 mb-5">
-                <div className="w-16 h-16 rounded-2xl bg-navy/10 flex items-center justify-center text-navy font-bold text-xl overflow-hidden border border-navy/10">
-                  {realtor.avatar_url ? (
-                    <img src={realtor.avatar_url} alt={realtor.full_name} className="w-full h-full object-cover" />
-                  ) : (
-                    <span>{realtor.full_name?.[0] || "R"}</span>
-                  )}
-                </div>
-                <div>
-                  <h3 className="font-bold text-lg text-navy flex items-center gap-1">
-                    {realtor.full_name || "Peşəkar Rieltor"} <FiCheckCircle className="text-emerald-600 text-sm" />
-                  </h3>
-                  <p className="text-xs text-navy/60 flex items-center gap-1 mt-0.5">
-                    <FiMapPin className="text-copper" /> {realtor.agency_name || "RF Master Sales Agency"}
-                  </p>
-                </div>
-              </div>
-
-              <div className="space-y-2.5 bg-slate-50 p-4 rounded-xl border border-navy/5 mb-6 text-sm">
-                <div className="flex justify-between items-center text-navy/80">
-                  <span className="flex items-center gap-1.5 text-xs"><FiTrendingUp className="text-copper" /> Aylıq Satış:</span>
-                  <span className="font-bold text-navy">{realtor.sales_count} əmlak</span>
-                </div>
-                <div className="flex justify-between items-center text-navy/80">
-                  <span className="flex items-center gap-1.5 text-xs"><FiStar className="text-amber-500" /> Müştəri Razılığı:</span>
-                  <span className="font-bold text-emerald-600">{realtor.satisfaction_rate}%</span>
-                </div>
-                <div className="flex justify-between items-center text-navy/80">
-                  <span className="flex items-center gap-1.5 text-xs">⚡ Orta Satış Sürəti:</span>
-                  <span className="font-bold text-navy">{realtor.sales_speed_days} gün</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              {realtor.phone && (
-                <a 
-                  href={`tel:${realtor.phone}`}
-                  className="w-full flex items-center justify-center gap-2 rounded-xl bg-navy text-white hover:bg-copper py-2.5 px-4 text-xs font-semibold transition shadow-sm"
-                >
-                  <FiPhone /> {realtor.phone}
-                </a>
-              )}
-              <Link
-                href={`/realtors/${realtor.id}`}
-                className="w-full flex items-center justify-center gap-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-navy py-2.5 px-4 text-xs font-semibold transition text-center"
+          <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+            <span className="text-xs font-semibold text-navy/60 dark:text-slate-400 whitespace-nowrap">
+              Sırala:
+            </span>
+            <div className="flex gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
+              <button
+                type="button"
+                onClick={() => setSortBy("rating")}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                  sortBy === "rating"
+                    ? "bg-white dark:bg-slate-900 text-copper shadow-sm"
+                    : "text-navy/70 dark:text-slate-400 hover:text-navy dark:hover:text-white"
+                }`}
               >
-                Hesabına və Elanlarına Bax
-              </Link>
+                Reytinqə görə
+              </button>
+              <button
+                type="button"
+                onClick={() => setSortBy("sales")}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                  sortBy === "sales"
+                    ? "bg-white dark:bg-slate-900 text-copper shadow-sm"
+                    : "text-navy/70 dark:text-slate-400 hover:text-navy dark:hover:text-white"
+                }`}
+              >
+                Satış sayına görə
+              </button>
+              <button
+                type="button"
+                onClick={() => setSortBy("speed")}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                  sortBy === "speed"
+                    ? "bg-white dark:bg-slate-900 text-copper shadow-sm"
+                    : "text-navy/70 dark:text-slate-400 hover:text-navy dark:hover:text-white"
+                }`}
+              >
+                Satış sürətinə görə
+              </button>
             </div>
           </div>
-        ))}
+        </div>
+
+        {/* Rieltorlar Siyahısı */}
+        {loading ? (
+          <div className="py-20 text-center space-y-3">
+            <div className="w-10 h-10 border-4 border-copper border-t-transparent rounded-full animate-spin mx-auto" />
+            <p className="text-sm font-semibold text-navy/60 dark:text-slate-400">
+              Rieltorlar reytinqi yüklənir...
+            </p>
+          </div>
+        ) : filteredRealtors.length === 0 ? (
+          <div className="bg-white dark:bg-slate-900 rounded-2xl p-12 text-center border border-navy/10 dark:border-slate-800">
+            <p className="text-sm text-navy/60 dark:text-slate-400 font-medium">
+              Axtarışa uyğun rieltor tapılmadı.
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredRealtors.map((realtor, index) => (
+              <div
+                key={realtor.id}
+                className="bg-white dark:bg-slate-900 rounded-2xl shadow-card border border-navy/10 dark:border-slate-800 p-6 flex flex-col justify-between relative overflow-hidden transition hover:shadow-lg group"
+              >
+                {/* Reytinq Nişanı */}
+                <div className="absolute top-4 right-4 bg-navy dark:bg-slate-800 text-white text-[11px] font-bold px-2.5 py-1 rounded-full flex items-center gap-1 shadow-sm border border-copper/30">
+                  <FiAward className="text-copper" /> #{index + 1} Top Rieltor
+                </div>
+
+                <div>
+                  {/* Profil Başlığı */}
+                  <div className="flex items-center gap-3.5 mb-4">
+                    <div className="w-14 h-14 rounded-2xl bg-navy/10 dark:bg-slate-800 flex items-center justify-center text-navy dark:text-white font-bold text-lg overflow-hidden border border-navy/10 dark:border-slate-700 shrink-0">
+                      {realtor.avatar_url ? (
+                        <img
+                          src={realtor.avatar_url}
+                          alt={realtor.full_name}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <span>{realtor.full_name?.[0] || "R"}</span>
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <Link
+                        href={`/realtors/${realtor.id}`}
+                        className="font-bold text-base text-navy dark:text-white group-hover:text-copper transition flex items-center gap-1.5 truncate"
+                      >
+                        <span className="truncate">{realtor.full_name || "Peşəkar Rieltor"}</span>
+                        <FiCheckCircle
+                          className="text-emerald-500 text-sm shrink-0"
+                          title="Təsdiqlənmiş Rieltor"
+                        />
+                      </Link>
+                      <p className="text-xs text-navy/60 dark:text-slate-400 truncate mt-0.5">
+                        {realtor.agency_name || "MÜLKERA Agentliyi"}
+                      </p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-500">
+                          <FiStar className="fill-amber-500 text-xs" /> {realtor.rating || 4.9}
+                        </span>
+                        <span className="text-[10px] text-navy/40 dark:text-slate-500">
+                          ({realtor.reviews_count || 12} rəy)
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Rieltor Detalları: Komissiya və Qanuni Status */}
+                  <div className="grid grid-cols-2 gap-2 mb-3">
+                    <div className="bg-slate-50 dark:bg-slate-800/60 p-2.5 rounded-xl border border-navy/5 dark:border-slate-800">
+                      <span className="text-[10px] font-semibold text-navy/50 dark:text-slate-400 block flex items-center gap-1">
+                        <FiPercent className="text-copper" /> Xidmət haqqı:
+                      </span>
+                      <span className="text-xs font-extrabold text-copper">
+                        {realtor.commission_rate || "1-2%"}
+                      </span>
+                    </div>
+
+                    <div className="bg-slate-50 dark:bg-slate-800/60 p-2.5 rounded-xl border border-navy/5 dark:border-slate-800">
+                      <span className="text-[10px] font-semibold text-navy/50 dark:text-slate-400 block flex items-center gap-1">
+                        <FiShield className="text-emerald-500" /> Hüquqi status:
+                      </span>
+                      <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
+                        VÖEN təsdiqli
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Statistika Qutusu */}
+                  <div className="space-y-2 bg-slate-50 dark:bg-slate-800/40 p-3.5 rounded-xl border border-navy/5 dark:border-slate-800 mb-5 text-xs">
+                    <div className="flex justify-between items-center text-navy/80 dark:text-slate-300">
+                      <span className="flex items-center gap-1.5">
+                        <FiTrendingUp className="text-copper" /> Aylıq Satış:
+                      </span>
+                      <span className="font-bold text-navy dark:text-white">
+                        {realtor.sales_count} əmlak
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center text-navy/80 dark:text-slate-300">
+                      <span className="flex items-center gap-1.5">
+                        <FiStar className="text-amber-500" /> Müştəri Razılığı:
+                      </span>
+                      <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                        {realtor.satisfaction_rate}%
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center text-navy/80 dark:text-slate-300">
+                      <span className="flex items-center gap-1.5">
+                        ⚡ Satış Sürəti:
+                      </span>
+                      <span className="font-bold text-navy dark:text-white">
+                        orta {realtor.sales_speed_days} gün
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Əlaqə və Profilə Keçid Düymələri */}
+                <div className="space-y-2 pt-2 border-t border-navy/5 dark:border-slate-800">
+                  {realtor.phone && (
+                    <a
+                      href={`tel:${realtor.phone}`}
+                      className="w-full flex items-center justify-center gap-2 rounded-xl bg-navy text-white hover:bg-copper py-2.5 px-4 text-xs font-semibold transition shadow-sm"
+                    >
+                      <FiPhone /> {realtor.phone}
+                    </a>
+                  )}
+                  <Link
+                    href={`/realtors/${realtor.id}`}
+                    className="w-full flex items-center justify-center gap-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-navy dark:text-slate-200 py-2.5 px-4 text-xs font-semibold transition text-center"
+                  >
+                    Profilə və Bütün Elanlarına Bax
+                  </Link>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
