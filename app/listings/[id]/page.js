@@ -98,8 +98,40 @@ export default function ListingDetailPage() {
           setListing(null);
           setFetchError(new Error(json.message || "Elan tapılmadı"));
         } else {
-          setListing(json.data);
-          setRelatedListings(json.related || []);
+          const currentItem = json.data;
+          setListing(currentItem);
+
+          // Oxşar Elanlar: Supabase sorğusu ilə rayon və qiymətə uyğun elanları çəkirik
+          let similarData = [];
+          if (supabase && typeof supabase.from === "function") {
+            try {
+              let q = supabase
+                .from("listings")
+                .select("*, listing_photos(*), categories(*), districts(*)")
+                .neq("id", currentItem.id);
+
+              if (currentItem.district_id) {
+                q = q.eq("district_id", currentItem.district_id);
+              }
+              if (currentItem.price && Number(currentItem.price) > 0) {
+                const minPrice = Math.round(Number(currentItem.price) * 0.7);
+                const maxPrice = Math.round(Number(currentItem.price) * 1.4);
+                q = q.gte("price", minPrice).lte("price", maxPrice);
+              }
+
+              const { data: sbSimilar, error: sbErr } = await q.limit(4);
+              if (!sbErr && sbSimilar && sbSimilar.length > 0) {
+                similarData = sbSimilar;
+              }
+            } catch (sbErr) {
+              console.warn("Supabase similar listings sorğusu xətası:", sbErr);
+            }
+          }
+
+          if (similarData.length === 0) {
+            similarData = json.related || [];
+          }
+          setRelatedListings(similarData);
 
           // Baxış sayını artır
           fetch(`/api/listings/${id}/view`, { method: "POST" }).catch(() => {});

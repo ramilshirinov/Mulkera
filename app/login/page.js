@@ -6,7 +6,7 @@ import { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useApp } from "@/context/AppContext";
-import { FiMail, FiLock, FiArrowRight, FiCheckCircle, FiShield, FiAward, FiUser } from "react-icons/fi";
+import { FiMail, FiLock, FiArrowRight, FiCheckCircle, FiShield, FiAward, FiUser, FiEye, FiEyeOff } from "react-icons/fi";
 
 function LoginForm() {
   const { login, quickLogin } = useApp();
@@ -16,6 +16,7 @@ function LoginForm() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
@@ -163,13 +164,21 @@ function LoginForm() {
               <FiLock />
             </span>
             <input
-              type="password"
+              type={showPassword ? "text" : "password"}
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
-              className="w-full pl-11 pr-4 py-3 bg-slate-50 dark:bg-slate-800 border border-navy/15 dark:border-slate-700 rounded-xl text-sm text-navy dark:text-white outline-none focus:border-copper transition"
+              className="w-full pl-11 pr-12 py-3 bg-slate-50 dark:bg-slate-800 border border-navy/15 dark:border-slate-700 rounded-xl text-sm text-navy dark:text-white outline-none focus:border-copper transition"
             />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute inset-y-0 right-0 pr-4 flex items-center text-navy/40 dark:text-slate-400 hover:text-copper cursor-pointer"
+              title={showPassword ? "Şifrəni gizlət" : "Şifrəni göstər"}
+            >
+              {showPassword ? <FiEyeOff className="text-base" /> : <FiEye className="text-base" />}
+            </button>
           </div>
         </div>
 
