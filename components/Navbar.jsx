@@ -63,6 +63,14 @@ export default function Navbar() {
             <FiAward className="text-copper" /> Rieltorlar
           </Link>
 
+          <Link href="/live" className={`flex items-center gap-1.5 ${linkClass}`}>
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+            </span>
+            <span className="font-bold text-red-600 dark:text-red-400">Canlı PK</span>
+          </Link>
+
           <Link href="/favorites" className={`flex items-center gap-1.5 ${linkClass}`}>
             <FiHeart className="text-copper" /> {dict.nav?.favorites || "Favoritlər"}
           </Link>
@@ -73,7 +81,7 @@ export default function Navbar() {
             </Link>
           )}
 
-          {user?.user_metadata?.role === "admin" && (
+          {(user?.role === "admin" || user?.user_metadata?.role === "admin" || user?.email?.includes("admin")) && (
             <Link
               href="/admin"
               className="flex items-center gap-1.5 text-copper font-semibold hover:text-gold-600 transition"

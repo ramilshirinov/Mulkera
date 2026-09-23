@@ -13,10 +13,27 @@ export default function ListingCard({ listing }) {
   const currentLocale = locale || language || "az";
   const [imgError, setImgError] = useState(false);
 
-  // Şəklin təyini: listing_photos massivindən, köhnə image_url-dən və ya placeholder-dən istifadə edirik
-  const photos = Array.isArray(listing.listing_photos) ? listing.listing_photos : [];
-  const firstImage = photos.find((p) => p?.url && p.media_type !== "video");
-  const rawPhoto = firstImage?.url || listing.image_url || "";
+  // Şəklin etibarlı təyini: listing_photos, photos, images, image_url və s. yoxlanılır
+  const rawPhoto = (() => {
+    if (!listing) return "";
+    if (Array.isArray(listing.listing_photos) && listing.listing_photos.length > 0) {
+      const found = listing.listing_photos.find((p) => {
+        const u = typeof p === "string" ? p : p?.url;
+        const type = typeof p === "object" ? p?.media_type : null;
+        return !!u && type !== "video" && !u.match(/\.(mp4|webm|mov)$/i);
+      });
+      if (found) return typeof found === "string" ? found : found.url;
+    }
+    if (Array.isArray(listing.photos) && listing.photos.length > 0) {
+      const first = listing.photos[0];
+      return typeof first === "string" ? first : first?.url || "";
+    }
+    if (Array.isArray(listing.images) && listing.images.length > 0) {
+      const first = listing.images[0];
+      return typeof first === "string" ? first : first?.url || "";
+    }
+    return listing.image_url || listing.cover_image || listing.photo_url || "";
+  })();
   
   // Əgər şəkil yoxdursa və ya xəta baş veribsə placeholder göstəriləcək
   const mainPhoto = imgError || !rawPhoto ? PLACEHOLDER : rawPhoto;
@@ -57,8 +74,15 @@ export default function ListingCard({ listing }) {
 
           {/* VIP badge */}
           {listing.is_vip && (
-            <span className="absolute top-3 right-3 bg-amber-500 text-white text-[10px] font-extrabold px-2.5 py-1 rounded-full shadow-sm">
-              VIP
+            <span className="absolute top-3 right-3 bg-gradient-to-r from-amber-500 to-yellow-500 text-white text-[10px] font-extrabold px-2.5 py-1 rounded-full shadow-md flex items-center gap-1">
+              <span>👑</span> VIP
+            </span>
+          )}
+
+          {/* Oxşarlıq faizi nişanı (əgər oxşar elanlar bölməsindədirsə) */}
+          {listing._matchPercentage && (
+            <span className="absolute bottom-3 left-3 bg-emerald-600/95 text-white text-[10px] font-bold px-2.5 py-1 rounded-lg shadow-sm backdrop-blur-sm flex items-center gap-1">
+              <span>🎯</span> {listing._matchPercentage}% Oxşarlıq
             </span>
           )}
 
@@ -87,6 +111,17 @@ export default function ListingCard({ listing }) {
             <FiMapPin className="text-copper shrink-0" />
             <span className="truncate">{listing.address} {districtName ? `· ${districtName}` : ""}</span>
           </p>
+
+          {/* Oxşarlıq səbəbləri */}
+          {Array.isArray(listing._matchReasons) && listing._matchReasons.length > 0 && (
+            <div className="flex flex-wrap gap-1 pt-1">
+              {listing._matchReasons.map((r, i) => (
+                <span key={i} className="text-[10px] px-1.5 py-0.5 rounded-md bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 font-medium">
+                  ✓ {r}
+                </span>
+              ))}
+            </div>
+          )}
 
           {/* Otaq və sahə məlumatları */}
           <div className="grid grid-cols-3 gap-2 pt-2 border-t border-navy/5 dark:border-slate-700 text-center text-xs text-navy/80 dark:text-slate-300">

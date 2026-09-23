@@ -17,11 +17,31 @@ html {
 }
 
 body {
-  @apply bg-[#F8FAFC] text-navy font-body antialiased;
+  @apply bg-[#F8FAFC] dark:bg-slate-950 text-navy dark:text-slate-100 font-body antialiased transition-colors duration-200;
 }
 
 h1, h2, h3, h4, h5, h6 {
-  @apply font-heading text-navy;
+  @apply font-heading text-navy dark:text-slate-100;
+}
+
+.dark .card-surface {
+  @apply bg-slate-900 border-slate-800 text-slate-100;
+}
+
+.custom-price-marker,
+.mulkera-marker {
+  background: transparent !important;
+  border: none !important;
+}
+
+.leaflet-popup-content-wrapper {
+  border-radius: 1rem !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+}
+.leaflet-popup-content {
+  margin: 0 !important;
+  line-height: normal !important;
 }
 
 ::selection {

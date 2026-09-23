@@ -23,31 +23,44 @@ function pinHtml(confirmed) {
  * value    → təsdiqlənmiş koordinat ({ lat, lng } və ya null)
  * onChange → YALNIZ "təsdiq et" düyməsi basılanda çağırılır ({ lat, lng }), sıfırlananda null
  */
-export default function LocationPicker({ value = null, onChange, height = 380 }) {
+export default function LocationPicker({
+  value = null,
+  latitude = null,
+  longitude = null,
+  onChange,
+  height = 380,
+}) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
   const markerRef = useRef(null);
   const leafletRef = useRef(null);
 
-  const [mapReady, setMapReady] = useState(false);
-  const [pending, setPending] = useState(() => normalize(value));
+  const initial = normalize(
+    value || (latitude != null && longitude != null ? { lat: latitude, lng: longitude } : null)
+  );
 
-  const confirmed = normalize(value);
+  const [mapReady, setMapReady] = useState(false);
+  const [pending, setPending] = useState(() => initial);
+  const [confirmedState, setConfirmedState] = useState(() => initial);
+
   const isConfirmed =
-    !!confirmed &&
+    !!confirmedState &&
     !!pending &&
-    confirmed.lat === pending.lat &&
-    confirmed.lng === pending.lng;
+    Math.abs(confirmedState.lat - pending.lat) < 0.00001 &&
+    Math.abs(confirmedState.lng - pending.lng) < 0.00001;
   const isDirty = !!pending && !isConfirmed;
 
-  // Xarici dəyər dəyişəndə (redaktə rejimi) seçimi sinxronlaşdırırıq
-  const valueLat = confirmed?.lat;
-  const valueLng = confirmed?.lng;
+  // Xarici dəyər dəyişəndə sinxronlaşdırırıq
   useEffect(() => {
-    if (valueLat === undefined || valueLng === undefined) return;
-    setPending({ lat: valueLat, lng: valueLng });
-    if (mapRef.current) mapRef.current.setView([valueLat, valueLng], 15);
-  }, [valueLat, valueLng, mapReady]);
+    const next = normalize(
+      value || (latitude != null && longitude != null ? { lat: latitude, lng: longitude } : null)
+    );
+    if (next) {
+      setPending(next);
+      setConfirmedState(next);
+      if (mapRef.current) mapRef.current.setView([next.lat, next.lng], 15);
+    }
+  }, [value, latitude, longitude]);
 
   // Xəritəni bir dəfə qururuq
   useEffect(() => {
@@ -58,7 +71,7 @@ export default function LocationPicker({ value = null, onChange, height = 380 })
       const L = mod.default || mod;
       if (cancelled || !containerRef.current || mapRef.current) return;
 
-      const start = normalize(value);
+      const start = initial;
       const map = L.map(containerRef.current).setView(
         start ? [start.lat, start.lng] : BAKU_CENTER,
         start ? 15 : 11
@@ -68,7 +81,7 @@ export default function LocationPicker({ value = null, onChange, height = 380 })
         maxZoom: 19,
       }).addTo(map);
 
-      // Klik → gözləyən seçim (hələ təsdiqlənmir)
+      // Klik → gözləyən seçim
       map.on("click", (e) => {
         setPending({ lat: e.latlng.lat, lng: e.latlng.lng });
       });
@@ -128,60 +141,106 @@ export default function LocationPicker({ value = null, onChange, height = 380 })
 
   const handleConfirm = () => {
     if (!pending) return;
-    onChange?.({ lat: pending.lat, lng: pending.lng });
+    setConfirmedState(pending);
+    if (onChange) {
+      // Həm (lat, lng), həm də ({ lat, lng }) formatında ötürülür
+      if (onChange.length >= 2) {
+        onChange(pending.lat, pending.lng);
+      } else {
+        onChange(pending);
+      }
+    }
   };
 
   const handleReset = () => {
     setPending(null);
-    onChange?.(null);
+    setConfirmedState(null);
+    if (onChange) {
+      if (onChange.length >= 2) {
+        onChange(null, null);
+      } else {
+        onChange(null);
+      }
+    }
   };
 
   return (
     <div className="space-y-3">
-      {/* Vəziyyət paneli */}
+      {/* Vəziyyət və Koordinat Paneli */}
       {!pending && (
         <div className="flex items-center gap-2 rounded-xl border border-navy/10 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-4 py-3 text-sm font-medium text-navy/70 dark:text-slate-300">
-          <FiMapPin className="text-copper" />
-          Əmlakın yerini seçmək üçün xəritədə klikləyin.
+          <FiMapPin className="text-copper shrink-0" />
+          <span>Əmlakın yerini seçmək üçün xəritədə istənilən nöqtəyə klikləyin və ya markeri sürükləyin.</span>
         </div>
       )}
       {isDirty && (
-        <div className="flex items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-950/40 dark:border-amber-800 px-4 py-3 text-sm font-semibold text-amber-800 dark:text-amber-300">
-          <FiMapPin />
-          Yer seçildi, lakin hələ təsdiqlənməyib. Aşağıdakı düyməyə basın.
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-950/40 dark:border-amber-800 px-4 py-3 text-sm font-semibold text-amber-800 dark:text-amber-300">
+          <div className="flex items-center gap-2">
+            <FiMapPin className="shrink-0 text-amber-600" />
+            <span>Yer seçildi (Gözləyir):</span>
+            <span className="font-mono bg-amber-100 dark:bg-amber-900/60 px-2 py-0.5 rounded text-xs">
+              {pending.lat.toFixed(5)}, {pending.lng.toFixed(5)}
+            </span>
+          </div>
+          <span className="text-xs text-amber-700 dark:text-amber-400 font-normal">
+            Təsdiq etmək üçün aşağıdakı düyməyə basın ➔
+          </span>
         </div>
       )}
       {isConfirmed && (
-        <div className="flex items-center gap-2 rounded-xl border border-green-300 bg-green-50 dark:bg-green-950/40 dark:border-green-800 px-4 py-3 text-sm font-semibold text-green-800 dark:text-green-300">
-          <FiCheckCircle />
-          Yer təsdiqləndi ({confirmed.lat.toFixed(5)}, {confirmed.lng.toFixed(5)})
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 dark:border-emerald-800 px-4 py-3 text-sm font-semibold text-emerald-800 dark:text-emerald-300">
+          <div className="flex items-center gap-2">
+            <FiCheckCircle className="shrink-0 text-emerald-600" />
+            <span>Məkan Təsdiqləndi:</span>
+            <span className="font-mono bg-emerald-100 dark:bg-emerald-900/60 px-2 py-0.5 rounded text-xs">
+              {confirmedState.lat.toFixed(5)}, {confirmedState.lng.toFixed(5)}
+            </span>
+          </div>
+          <span className="text-xs text-emerald-700 dark:text-emerald-400 font-medium flex items-center gap-1">
+            ✓ Koordinatlar yadda saxlandı
+          </span>
         </div>
       )}
 
       {/* Xəritə */}
       <div
-        className="relative isolate w-full overflow-hidden rounded-xl border border-navy/10 dark:border-slate-700"
+        className="relative isolate w-full overflow-hidden rounded-xl border border-navy/10 dark:border-slate-700 shadow-sm"
         style={{ height }}
       >
         <div ref={containerRef} className="absolute inset-0" />
       </div>
 
-      {/* Düymələr */}
-      <div className="flex flex-col gap-2 sm:flex-row">
+      {/* Düymələr və Vizual Koordinat İnformasiyası */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
         <button
           type="button"
           onClick={handleConfirm}
           disabled={!pending || isConfirmed}
-          className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-navy px-5 py-3 text-sm font-bold text-white transition hover:bg-copper disabled:cursor-not-allowed disabled:opacity-50"
+          className={`flex flex-1 items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-bold transition shadow-sm cursor-pointer ${
+            isConfirmed
+              ? "bg-emerald-600 text-white cursor-default"
+              : pending
+              ? "bg-copper hover:bg-copper/90 text-white animate-pulse"
+              : "bg-navy text-white hover:bg-copper disabled:cursor-not-allowed disabled:opacity-50"
+          }`}
         >
-          <FiCheckCircle />
-          {isConfirmed ? "Yer təsdiqlənib" : "Bu yeri təsdiq et / Seçimi yadda saxla"}
+          <FiCheckCircle className="text-base" />
+          {isConfirmed ? "Məkan Təsdiqləndi ✓" : "Məkanı Təsdiqlə (Confirm Location)"}
         </button>
+
+        {pending && (
+          <div className="hidden md:flex items-center gap-2 px-3 py-2 bg-slate-100 dark:bg-slate-800 rounded-xl border border-navy/10 dark:border-slate-700 text-xs font-mono text-navy/80 dark:text-slate-300">
+            <span>Enlik: <strong>{pending.lat.toFixed(5)}</strong></span>
+            <span>·</span>
+            <span>Uzunluq: <strong>{pending.lng.toFixed(5)}</strong></span>
+          </div>
+        )}
+
         <button
           type="button"
           onClick={handleReset}
-          disabled={!pending && !confirmed}
-          className="flex items-center justify-center gap-2 rounded-xl border border-navy/15 dark:border-slate-600 bg-white dark:bg-slate-900 px-5 py-3 text-sm font-semibold text-navy dark:text-slate-100 transition hover:border-copper hover:text-copper disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={!pending && !confirmedState}
+          className="flex items-center justify-center gap-2 rounded-xl border border-navy/15 dark:border-slate-600 bg-white dark:bg-slate-900 px-5 py-3 text-sm font-semibold text-navy dark:text-slate-100 transition hover:border-copper hover:text-copper disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
         >
           <FiRotateCcw /> Sıfırla
         </button>

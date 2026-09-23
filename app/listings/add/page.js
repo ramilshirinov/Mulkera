@@ -2,55 +2,21 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import dynamic from "next/dynamic";
 import { useApp } from "@/context/AppContext";
-import { fetchCategories, fetchDistricts, createListing, localizedField } from "@/lib/listings";
+import {
+  fetchCategories,
+  fetchDistricts,
+  createListing,
+  localizedField,
+} from "@/lib/listings";
+import { AZERBAIJAN_REGIONS } from "@/constants/locations";
 import MediaUploader from "@/components/MediaUploader";
-import { FiCheckCircle, FiPlusCircle } from "react-icons/fi";
+import { FiPlusCircle, FiCheckCircle, FiHome, FiDollarSign, FiMapPin, FiLayers } from "react-icons/fi";
 
-const LocationPicker = dynamic(() => import("@/components/LocationPicker"), {
-  ssr: false,
-  loading: () => <div className="h-[320px] w-full animate-pulse rounded-xl bg-slate-100 flex items-center justify-center text-navy/60">Xəritə yüklənir...</div>,
-});
-
-const DOCUMENT_OPTIONS = ["Çıxarış", "Kupça", "Texniki pasport", "Notarial müqavilə", "Digər"];
-
-const azerbaijanRegions = [
-  { name: "Bakı", districts: ["Binəqədi", "Nəsimi", "Nizami", "Nərimanov", "Səbail", "Sabunçu", "Suraxanı", "Xətai", "Xəzər", "Pirallahı", "Yasamal", "Qaradağ", "Digər"] },
-  { name: "Sumqayıt", districts: ["1-ci mkr", "2-ci mkr", "3-cü mkr", "4-cü mkr", "5-ci mkr", "6-cı mkr", "7-ci mkr", "8-ci mkr", "9-cu mkr", "Stansiya Sumqayıt", "Corat", "Hacı Zeynalabdin", "Novxanı bağları", "İnşaatçılar", "Digər"] },
-  { name: "Abşeron", districts: ["Xırdalan", "Masazır", "Saray", "Ceyranbatan", "Güzdək", "Hökməli", "Məmmədli", "Mehdiabad", "Novxanı", "Pirəkəşkül", "Digər"] },
-  { name: "Gəncə", districts: ["Kəpəz rayonu", "Nizami rayonu", "Digər"] },
-  { name: "Şirvan", districts: ["Şirvan şəhər mərkəzi", "Hacıqəfil", "Digər"] },
-  { name: "Lənkəran", districts: ["Lənkəran şəhər mərkəzi", "Girdəh", "Kirov", "Liman", "Digər"] },
-  { name: "Mingəçevir", districts: ["Mingəçevir şəhər mərkəzi", "Ağcəbədi yolu istiqaməti", "Digər"] },
-  { name: "Naftalan", districts: ["Naftalan mərkəz", "Digər"] },
-  { name: "Şəki", districts: ["Şəki şəhər mərkəzi", "Oxut", "Kiçik Dəhnə", "Böyük Dəhnə", "Digər"] },
-  { name: "Quba", districts: ["Quba şəhər mərkəzi", "Qırmızı qəsəbə", "Nügədi", "Aşağı Tülkədar", "Digər"] },
-  { name: "Qusar", districts: ["Qusar şəhər mərkəzi", "Həzrə", "Aşağı Ləgər", "Digər"] },
-  { name: "Xaçmaz", districts: ["Xaçmaz şəhər mərkəzi", "Xudat", "Nabran", "Müxbirlər", "Digər"] },
-  { name: "Qəbələ", districts: ["Qəbələ şəhər mərkəzi", "Vəndam", "Bum", "Nic", "Digər"] },
-  { name: "İsmayıllı", districts: ["İsmayıllı şəhər mərkəzi", "Lahıc", "İvanovka", "Qoşakənd", "Digər"] },
-  { name: "Şamaxı", districts: ["Şamaxı şəhər mərkəzi", "Mədrəsə", "Çuxuryurd", "Digər"] },
-  { name: "Ağdam", districts: ["Ağdam şəhər mərkəzi", "Quzanlı", "Bənövşələr", "Digər"] },
-  { name: "Füzuli", districts: ["Füzuli şəhər mərkəzi", "Horadiz", "Aşağı Əbdürrəhmanlı", "Digər"] },
-  { name: "Zəngilan", districts: ["Zəngilan şəhər mərkəzi", "Ağbənd", "Mincivan", "Digər"] },
-  { name: "Cəbrayil", districts: ["Cəbrayil şəhər mərkəzi", "Mehdixeyli", "Digər"] },
-  { name: "Qubadlı", districts: ["Qubadlı şəhər mərkəzi", "Digər"] },
-  { name: "Laçın", districts: ["Laçın şəhər mərkəzi", "Güləbird", "Zabux", "Digər"] },
-  { name: "Kəlbəcər", districts: ["Kəlbəcər şəhər mərkəzi", "İstisu", "Digər"] },
-  { name: "Şuşa", districts: ["Şuşa şəhər mərkəzi", "Turşsu", "Digər"] },
-  { name: "Xocavənd", districts: ["Xocavənd şəhər mərkəzi", "Hadrut", "Digər"] },
-  { name: "Xocalı", districts: ["Xocalı şəhər mərkəzi", "Əsgəran", "Digər"] },
-  { name: "Digər", districts: ["Digər bölgələr"] }
-];
-
-const emptyForm = {
+const INITIAL_FORM = {
   title_az: "",
   description_az: "",
   category_id: "",
-  selected_city: "Bakı",
-  district_name: "",
-  district_id: "",
   transaction_type: "sale",
   price: "",
   currency: "AZN",
@@ -59,27 +25,42 @@ const emptyForm = {
   yard_sot: "",
   floor_number: "",
   total_floors: "",
+  selected_city: "baku",
+  district_name: "",
+  district_id: "",
   address: "",
-  latitude: 40.4093,
-  longitude: 49.8671,
+  latitude: "",
+  longitude: "",
   phone_number: "",
-  documents: [],
+  documents: ["Kupça (Çıxarış)"],
 };
 
-export default function AddListingPage() {
-  const { user, profile, supabase, loadingAuth, locale } = useApp();
-  const router = useRouter();
+const DOC_OPTIONS = [
+  "Kupça (Çıxarış)",
+  "Müqavilə",
+  "Sərəncam",
+  "Bələdiyyə sənədi",
+  "Qeydiyyat vəsiqəsi",
+  "Dövlət aktı",
+  "Digər",
+];
 
+export default function AddListingPage() {
+  const router = useRouter();
+  const { user, profile, loadingAuth, locale, supabase } = useApp();
+
+  const [form, setForm] = useState(INITIAL_FORM);
   const [categories, setCategories] = useState([]);
   const [dbDistricts, setDbDistricts] = useState([]);
-  const [form, setForm] = useState(emptyForm);
   const [imageFiles, setImageFiles] = useState([]);
   const [videoFiles, setVideoFiles] = useState([]);
+
   const [errors, setErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
 
-  const currentDistricts = azerbaijanRegions.find((c) => c.name === form.selected_city)?.districts || [];
+  const activeRegion = AZERBAIJAN_REGIONS.find((r) => r.id === form.selected_city) || AZERBAIJAN_REGIONS[0];
+  const currentDistricts = activeRegion?.districts || [];
 
   useEffect(() => {
     fetchCategories(supabase).then(setCategories).catch(() => {});
@@ -88,7 +69,7 @@ export default function AddListingPage() {
 
   useEffect(() => {
     if (!loadingAuth && !user) {
-      router.push("/login?redirect=/add-listing");
+      router.push("/login?redirect=/listings/add");
     }
   }, [loadingAuth, user, router]);
 
@@ -126,7 +107,8 @@ export default function AddListingPage() {
 
     setSubmitting(true);
     try {
-      const fullAddress = `${form.selected_city}${form.district_name ? ", " + form.district_name : ""}, ${form.address}`;
+      const cityName = activeRegion?.name || "Bakı";
+      const fullAddress = `${cityName}${form.district_name ? ", " + form.district_name : ""}, ${form.address}`;
 
       const payload = {
         owner_id: user.id,
@@ -173,57 +155,60 @@ export default function AddListingPage() {
   };
 
   if (loadingAuth || !user) {
-    return <div className="py-32 text-center text-navy/60">Yüklənir...</div>;
+    return <div className="py-32 text-center text-navy/60 dark:text-slate-400 font-medium">Yüklənir...</div>;
   }
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6 lg:px-8">
-      <h1 className="mb-2 flex items-center gap-2 text-3xl font-bold font-heading text-navy">
+    <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6 lg:px-8 text-navy dark:text-slate-100">
+      <h1 className="mb-2 flex items-center gap-2 text-3xl font-bold font-heading text-navy dark:text-white">
         <FiPlusCircle className="text-copper" /> Yeni Elan Yerləşdir
       </h1>
-      <p className="mb-8 text-sm text-navy/65">Zəhmət olmasa tələb olunan sahələri doldurun.</p>
+      <p className="mb-8 text-sm text-navy/65 dark:text-slate-400">Zəhmət olmasa tələb olunan sahələri doldurun.</p>
 
       {success && (
-        <div className="mb-6 flex items-center gap-2 rounded-xl bg-emerald-50 p-4 text-sm font-medium text-emerald-700 border border-emerald-200">
+        <div className="mb-6 flex items-center gap-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 p-4 text-sm font-medium text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
           <FiCheckCircle className="text-lg" /> Elan uğurla əlavə olundu! Səhifə yönləndirilir...
         </div>
       )}
 
       <form onSubmit={handleSubmit} className="space-y-8">
-        <section className="card-surface p-6 sm:p-8 bg-white rounded-2xl shadow-card border border-navy/10 space-y-6">
-          <h2 className="text-lg font-bold text-navy border-b pb-3">Əsas Məlumatlar</h2>
+        {/* Əsas Məlumatlar */}
+        <section className="p-6 sm:p-8 bg-white dark:bg-slate-900 rounded-2xl shadow-card border border-navy/10 dark:border-slate-800 space-y-6 transition-colors">
+          <h2 className="text-lg font-bold text-navy dark:text-white border-b border-navy/10 dark:border-slate-800 pb-3 flex items-center gap-2">
+            <FiHome className="text-copper" /> Əsas Məlumatlar
+          </h2>
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-semibold text-navy mb-2">Elanın Başlığı *</label>
+              <label className="block text-sm font-semibold text-navy dark:text-slate-200 mb-2">Elanın Başlığı *</label>
               <input
                 value={form.title_az}
                 onChange={(e) => update("title_az", e.target.value)}
-                placeholder="Məs: Sumqayıtda 3 otaqlı mənzil"
-                className={`w-full rounded-xl bg-slate-50 border px-4 py-3 text-sm outline-none text-navy focus:border-copper transition ${
-                  errors.title_az ? "border-red-400 bg-red-50/30" : "border-navy/15"
+                placeholder="Məs: Nəsimi rayonunda 3 otaqlı təmirli mənzil"
+                className={`w-full rounded-xl bg-slate-50 dark:bg-slate-800 border px-4 py-3 text-sm outline-none text-navy dark:text-white placeholder:text-navy/40 dark:placeholder:text-slate-500 focus:border-copper transition ${
+                  errors.title_az ? "border-red-400 bg-red-50/30" : "border-navy/15 dark:border-slate-700"
                 }`}
               />
             </div>
             <div>
-              <label className="block text-sm font-semibold text-navy mb-2">Ətraflı Məlumat *</label>
+              <label className="block text-sm font-semibold text-navy dark:text-slate-200 mb-2">Ətraflı Məlumat *</label>
               <textarea
                 rows={4}
                 value={form.description_az}
                 onChange={(e) => update("description_az", e.target.value)}
-                placeholder="Əmlak haqqında ətraflı məlumat..."
-                className={`w-full rounded-xl bg-slate-50 border px-4 py-3 text-sm outline-none text-navy focus:border-copper transition resize-none ${
-                  errors.description_az ? "border-red-400 bg-red-50/30" : "border-navy/15"
+                placeholder="Əmlak haqqında ətraflı məlumat, təmir vəziyyəti, infrastruktur..."
+                className={`w-full rounded-xl bg-slate-50 dark:bg-slate-800 border px-4 py-3 text-sm outline-none text-navy dark:text-white placeholder:text-navy/40 dark:placeholder:text-slate-500 focus:border-copper transition resize-none ${
+                  errors.description_az ? "border-red-400 bg-red-50/30" : "border-navy/15 dark:border-slate-700"
                 }`}
               />
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-semibold text-navy mb-2">Kateqoriya *</label>
+                <label className="block text-sm font-semibold text-navy dark:text-slate-200 mb-2">Kateqoriya *</label>
                 <select
                   value={form.category_id}
                   onChange={(e) => update("category_id", e.target.value)}
-                  className={`w-full rounded-xl bg-slate-50 border px-4 py-3 text-sm outline-none text-navy focus:border-copper transition ${
-                    errors.category_id ? "border-red-400 bg-red-50/30" : "border-navy/15"
+                  className={`w-full rounded-xl bg-slate-50 dark:bg-slate-800 border px-4 py-3 text-sm outline-none text-navy dark:text-white focus:border-copper transition ${
+                    errors.category_id ? "border-red-400 bg-red-50/30" : "border-navy/15 dark:border-slate-700"
                   }`}
                 >
                   <option value="">— Kateqoriya seçin —</option>
@@ -234,11 +219,11 @@ export default function AddListingPage() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-semibold text-navy mb-2">Əməliyyat Növü *</label>
+                <label className="block text-sm font-semibold text-navy dark:text-slate-200 mb-2">Əməliyyat Növü *</label>
                 <select
                   value={form.transaction_type}
                   onChange={(e) => update("transaction_type", e.target.value)}
-                  className="w-full rounded-xl bg-slate-50 border border-navy/15 px-4 py-3 text-sm outline-none text-navy focus:border-copper transition"
+                  className="w-full rounded-xl bg-slate-50 dark:bg-slate-800 border border-navy/15 dark:border-slate-700 px-4 py-3 text-sm outline-none text-navy dark:text-white focus:border-copper transition"
                 >
                   <option value="sale">Satış</option>
                   <option value="long_term_rent">Uzunmüddətli kirayə</option>
@@ -250,230 +235,222 @@ export default function AddListingPage() {
           </div>
         </section>
 
-        <section className="card-surface p-6 sm:p-8 bg-white rounded-2xl shadow-card border border-navy/10 space-y-4">
-          <h2 className="text-lg font-bold text-navy border-b pb-3">Şəkil və Videolar</h2>
-          <div className="space-y-5">
+        {/* Qiymət və Parametrlər */}
+        <section className="p-6 sm:p-8 bg-white dark:bg-slate-900 rounded-2xl shadow-card border border-navy/10 dark:border-slate-800 space-y-6 transition-colors">
+          <h2 className="text-lg font-bold text-navy dark:text-white border-b border-navy/10 dark:border-slate-800 pb-3 flex items-center gap-2">
+            <FiDollarSign className="text-copper" /> Qiymət və Sahə Göstəriciləri
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-semibold text-navy dark:text-slate-200 mb-2">Qiymət *</label>
+              <div className="flex gap-2">
+                <input
+                  type="number"
+                  min="1"
+                  value={form.price}
+                  onChange={(e) => update("price", e.target.value)}
+                  placeholder="Məs: 150000"
+                  className={`w-full rounded-xl bg-slate-50 dark:bg-slate-800 border px-4 py-3 text-sm outline-none text-navy dark:text-white placeholder:text-navy/40 dark:placeholder:text-slate-500 focus:border-copper transition ${
+                    errors.price ? "border-red-400 bg-red-50/30" : "border-navy/15 dark:border-slate-700"
+                  }`}
+                />
+                <select
+                  value={form.currency}
+                  onChange={(e) => update("currency", e.target.value)}
+                  className="rounded-xl bg-slate-50 dark:bg-slate-800 border border-navy/15 dark:border-slate-700 px-4 py-3 text-sm outline-none text-navy dark:text-white focus:border-copper"
+                >
+                  <option value="AZN">AZN</option>
+                  <option value="USD">USD</option>
+                  <option value="EUR">EUR</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold text-navy dark:text-slate-200 mb-2">Sahə (m²) *</label>
+              <input
+                type="number"
+                min="1"
+                value={form.area_m2}
+                onChange={(e) => update("area_m2", e.target.value)}
+                placeholder="Məs: 85"
+                className={`w-full rounded-xl bg-slate-50 dark:bg-slate-800 border px-4 py-3 text-sm outline-none text-navy dark:text-white placeholder:text-navy/40 dark:placeholder:text-slate-500 focus:border-copper transition ${
+                  errors.area_m2 ? "border-red-400 bg-red-50/30" : "border-navy/15 dark:border-slate-700"
+                }`}
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold text-navy dark:text-slate-200 mb-2">Otaq Sayı</label>
+              <input
+                type="number"
+                min="1"
+                value={form.room_count}
+                onChange={(e) => update("room_count", e.target.value)}
+                placeholder="Məs: 3"
+                className="w-full rounded-xl bg-slate-50 dark:bg-slate-800 border border-navy/15 dark:border-slate-700 px-4 py-3 text-sm outline-none text-navy dark:text-white placeholder:text-navy/40 dark:placeholder:text-slate-500 focus:border-copper transition"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold text-navy dark:text-slate-200 mb-2">Həyət / Torpaq Sahəsi (sot)</label>
+              <input
+                type="number"
+                step="0.1"
+                min="0"
+                value={form.yard_sot}
+                onChange={(e) => update("yard_sot", e.target.value)}
+                placeholder="Məs: 4.5"
+                className="w-full rounded-xl bg-slate-50 dark:bg-slate-800 border border-navy/15 dark:border-slate-700 px-4 py-3 text-sm outline-none text-navy dark:text-white placeholder:text-navy/40 dark:placeholder:text-slate-500 focus:border-copper transition"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold text-navy dark:text-slate-200 mb-2">Yerləşdiyi Mərtəbə</label>
+              <input
+                type="number"
+                min="1"
+                value={form.floor_number}
+                onChange={(e) => update("floor_number", e.target.value)}
+                placeholder="Məs: 5"
+                className="w-full rounded-xl bg-slate-50 dark:bg-slate-800 border border-navy/15 dark:border-slate-700 px-4 py-3 text-sm outline-none text-navy dark:text-white placeholder:text-navy/40 dark:placeholder:text-slate-500 focus:border-copper transition"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold text-navy dark:text-slate-200 mb-2">Ümumi Mərtəbə Sayı</label>
+              <input
+                type="number"
+                min="1"
+                value={form.total_floors}
+                onChange={(e) => update("total_floors", e.target.value)}
+                placeholder="Məs: 16"
+                className="w-full rounded-xl bg-slate-50 dark:bg-slate-800 border border-navy/15 dark:border-slate-700 px-4 py-3 text-sm outline-none text-navy dark:text-white placeholder:text-navy/40 dark:placeholder:text-slate-500 focus:border-copper transition"
+              />
+            </div>
+          </div>
+        </section>
+
+        {/* Ünvan və Məkan */}
+        <section className="p-6 sm:p-8 bg-white dark:bg-slate-900 rounded-2xl shadow-card border border-navy/10 dark:border-slate-800 space-y-6 transition-colors">
+          <h2 className="text-lg font-bold text-navy dark:text-white border-b border-navy/10 dark:border-slate-800 pb-3 flex items-center gap-2">
+            <FiMapPin className="text-copper" /> Ərazi və Ünvan
+          </h2>
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-semibold text-navy dark:text-slate-200 mb-2">Şəhər / Region *</label>
+                <select
+                  value={form.selected_city}
+                  onChange={(e) => update("selected_city", e.target.value)}
+                  className="w-full rounded-xl bg-slate-50 dark:bg-slate-800 border border-navy/15 dark:border-slate-700 px-4 py-3 text-sm outline-none text-navy dark:text-white focus:border-copper"
+                >
+                  {AZERBAIJAN_REGIONS.map((r) => (
+                    <option key={r.id} value={r.id}>{r.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-navy dark:text-slate-200 mb-2">Rayon / Ərazi</label>
+                <select
+                  value={form.district_name}
+                  onChange={(e) => update("district_name", e.target.value)}
+                  className="w-full rounded-xl bg-slate-50 dark:bg-slate-800 border border-navy/15 dark:border-slate-700 px-4 py-3 text-sm outline-none text-navy dark:text-white focus:border-copper"
+                >
+                  <option value="">— Rayon seçin —</option>
+                  {currentDistricts.map((d) => (
+                    <option key={d.id || d.name} value={d.name}>{d.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold text-navy dark:text-slate-200 mb-2">Dəqiq Ünvan *</label>
+              <input
+                value={form.address}
+                onChange={(e) => update("address", e.target.value)}
+                placeholder="Məs: Nizami küç. 45, mənzil 12"
+                className={`w-full rounded-xl bg-slate-50 dark:bg-slate-800 border px-4 py-3 text-sm outline-none text-navy dark:text-white placeholder:text-navy/40 dark:placeholder:text-slate-500 focus:border-copper transition ${
+                  errors.address ? "border-red-400 bg-red-50/30" : "border-navy/15 dark:border-slate-700"
+                }`}
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold text-navy dark:text-slate-200 mb-2">Əlaqə Telefonu *</label>
+              <input
+                value={form.phone_number}
+                onChange={(e) => update("phone_number", e.target.value)}
+                placeholder="+994 50 123 45 67"
+                className={`w-full rounded-xl bg-slate-50 dark:bg-slate-800 border px-4 py-3 text-sm outline-none text-navy dark:text-white placeholder:text-navy/40 dark:placeholder:text-slate-500 focus:border-copper transition ${
+                  errors.phone_number ? "border-red-400 bg-red-50/30" : "border-navy/15 dark:border-slate-700"
+                }`}
+              />
+            </div>
+          </div>
+        </section>
+
+        {/* Sənədlər */}
+        <section className="p-6 sm:p-8 bg-white dark:bg-slate-900 rounded-2xl shadow-card border border-navy/10 dark:border-slate-800 space-y-4 transition-colors">
+          <h2 className="text-lg font-bold text-navy dark:text-white border-b border-navy/10 dark:border-slate-800 pb-3 flex items-center gap-2">
+            <FiLayers className="text-copper" /> Mövcud Sənədlər
+          </h2>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {DOC_OPTIONS.map((doc) => {
+              const checked = form.documents.includes(doc);
+              return (
+                <button
+                  type="button"
+                  key={doc}
+                  onClick={() => toggleDocument(doc)}
+                  className={`p-3 rounded-xl border text-xs font-semibold text-left transition cursor-pointer flex items-center justify-between ${
+                    checked
+                      ? "bg-navy dark:bg-copper text-white border-navy dark:border-copper shadow-sm"
+                      : "bg-slate-50 dark:bg-slate-800 text-navy/70 dark:text-slate-300 border-navy/15 dark:border-slate-700 hover:border-copper"
+                  }`}
+                >
+                  <span>{doc}</span>
+                  {checked && <FiCheckCircle />}
+                </button>
+              );
+            })}
+          </div>
+        </section>
+
+        {/* Media Yükləmə */}
+        <section className="p-6 sm:p-8 bg-white dark:bg-slate-900 rounded-2xl shadow-card border border-navy/10 dark:border-slate-800 space-y-4 transition-colors">
+          <h2 className="text-lg font-bold text-navy dark:text-white border-b border-navy/10 dark:border-slate-800 pb-3">
+            Şəkil və Video Yüklə *
+          </h2>
+          {errors.images && (
+            <p className="text-xs text-red-500 font-semibold">Ən azı 1 ədəd şəkil yükləmək məcburidir.</p>
+          )}
+          <div className="space-y-4">
             <MediaUploader
               files={imageFiles}
               setFiles={setImageFiles}
               accept="image/*"
               type="image"
-              label="Şəkil Faylları Seç (Ən azı 1 ədəd) *"
+              label="Şəkillər əlavə edin"
             />
-            {errors.images && <p className="text-xs text-red-500 font-medium">⚠️ Zəhmət olmasa, ən azı bir şəkil əlavə edin.</p>}
-
             <MediaUploader
               files={videoFiles}
               setFiles={setVideoFiles}
               accept="video/*"
               type="video"
-              label="Video Faylı Seç (Könüllü)"
+              label="Video əlavə edin (istəyə bağlı)"
             />
-          </div>
-        </section>
-
-        <section className="card-surface p-6 sm:p-8 bg-white rounded-2xl shadow-card border border-navy/10 space-y-4">
-          <h2 className="text-lg font-bold text-navy border-b pb-3">Məkan və Ünvan</h2>
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-semibold text-navy mb-2">Şəhər / Rayon *</label>
-                <select
-                  value={form.selected_city}
-                  onChange={(e) => {
-                    update("selected_city", e.target.value);
-                    update("district_name", "");
-                  }}
-                  className="w-full rounded-xl bg-slate-50 border border-navy/15 px-4 py-3 text-sm outline-none text-navy focus:border-copper transition"
-                >
-                  {azerbaijanRegions.map((reg) => (
-                    <option key={reg.name} value={reg.name}>{reg.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-navy mb-2">Qəsəbə / Ərazi</label>
-                <select
-                  value={form.district_name}
-                  onChange={(e) => update("district_name", e.target.value)}
-                  className="w-full rounded-xl bg-slate-50 border border-navy/15 px-4 py-3 text-sm outline-none text-navy focus:border-copper transition"
-                >
-                  <option value="">— Qəsəbə seçin —</option>
-                  {currentDistricts.map((d) => (
-                    <option key={d} value={d}>{d}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-semibold text-navy mb-2">Dəqiq Ünvan / Küçə *</label>
-              <input
-                value={form.address}
-                onChange={(e) => update("address", e.target.value)}
-                placeholder="Məs: Sülh küçəsi, bina 42"
-                className={`w-full rounded-xl bg-slate-50 border px-4 py-3 text-sm outline-none text-navy focus:border-copper transition ${
-                  errors.address ? "border-red-400 bg-red-50/30" : "border-navy/15"
-                }`}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-semibold text-navy mb-2">Xəritədə Dəqiq Yer Seçin</label>
-              <LocationPicker
-                latitude={form.latitude}
-                longitude={form.longitude}
-                onChange={(lat, lng) => {
-                  update("latitude", lat);
-                  update("longitude", lng);
-                }}
-              />
-            </div>
-          </div>
-        </section>
-
-        <section className="card-surface p-6 sm:p-8 bg-white rounded-2xl shadow-card border border-navy/10 space-y-4">
-          <h2 className="text-lg font-bold text-navy border-b pb-3">Əmlakın Parametrləri</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-semibold text-navy mb-2">Qiymət *</label>
-              <input
-                type="number"
-                min="0"
-                max="999999999"
-                placeholder="150000"
-                value={form.price}
-                onChange={(e) => {
-                  if (e.target.value.length <= 10) update("price", e.target.value);
-                }}
-                className={`w-full rounded-xl bg-slate-50 border px-4 py-3 text-sm outline-none text-navy focus:border-copper transition ${
-                  errors.price ? "border-red-400 bg-red-50/30" : "border-navy/15"
-                }`}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-semibold text-navy mb-2">Valyuta</label>
-              <select
-                value={form.currency}
-                onChange={(e) => update("currency", e.target.value)}
-                className="w-full rounded-xl bg-slate-50 border border-navy/15 px-4 py-3 text-sm outline-none text-navy focus:border-copper transition"
-              >
-                <option value="AZN">AZN (₼)</option>
-                <option value="USD">USD ($)</option>
-                <option value="EUR">EUR (€)</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-semibold text-navy mb-2">Sahə (m²) *</label>
-              <input
-                type="number"
-                min="0"
-                max="999999"
-                placeholder="85"
-                value={form.area_m2}
-                onChange={(e) => {
-                  if (e.target.value.length <= 7) update("area_m2", e.target.value);
-                }}
-                className={`w-full rounded-xl bg-slate-50 border px-4 py-3 text-sm outline-none text-navy focus:border-copper transition ${
-                  errors.area_m2 ? "border-red-400 bg-red-50/30" : "border-navy/15"
-                }`}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-semibold text-navy mb-2">Otaq sayı</label>
-              <input 
-                type="number" 
-                min="0" 
-                max="99" 
-                placeholder="3" 
-                value={form.room_count} 
-                onChange={(e) => {
-                  if (e.target.value.length <= 2) update("room_count", e.target.value);
-                }} 
-                className="w-full rounded-xl bg-slate-50 border border-navy/15 px-4 py-3 text-sm outline-none text-navy focus:border-copper transition" 
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-semibold text-navy mb-2">Həyət sahəsi (sot)</label>
-              <input 
-                type="number" 
-                min="0" 
-                max="9999" 
-                placeholder="2" 
-                value={form.yard_sot} 
-                onChange={(e) => {
-                  if (e.target.value.length <= 4) update("yard_sot", e.target.value);
-                }} 
-                className="w-full rounded-xl bg-slate-50 border border-navy/15 px-4 py-3 text-sm outline-none text-navy focus:border-copper transition" 
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-semibold text-navy mb-2">Mərtəbə</label>
-              <input 
-                type="number" 
-                min="0" 
-                max="999" 
-                placeholder="2" 
-                value={form.floor_number} 
-                onChange={(e) => {
-                  if (e.target.value.length <= 3) update("floor_number", e.target.value);
-                }} 
-                className="w-full rounded-xl bg-slate-50 border border-navy/15 px-4 py-3 text-sm outline-none text-navy focus:border-copper transition" 
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-semibold text-navy mb-2">Binanın ümumi mərtəbəsi</label>
-              <input 
-                type="number" 
-                min="0" 
-                max="999" 
-                placeholder="16" 
-                value={form.total_floors} 
-                onChange={(e) => {
-                  if (e.target.value.length <= 3) update("total_floors", e.target.value);
-                }} 
-                className="w-full rounded-xl bg-slate-50 border border-navy/15 px-4 py-3 text-sm outline-none text-navy focus:border-copper transition" 
-              />
-            </div>
-            <div className="sm:col-span-2">
-              <label className="block text-sm font-semibold text-navy mb-2">Əlaqə Nömrəsi *</label>
-              <input
-                type="text"
-                value={form.phone_number}
-                onChange={(e) => update("phone_number", e.target.value)}
-                placeholder="+994 50 123 45 67"
-                className={`w-full rounded-xl bg-slate-50 border px-4 py-3 text-sm outline-none text-navy focus:border-copper transition ${
-                  errors.phone_number ? "border-red-400 bg-red-50/30" : "border-navy/15"
-                }`}
-              />
-            </div>
-          </div>
-
-          <div className="mt-4">
-            <label className="block text-sm font-semibold text-navy mb-2">Sənədlər</label>
-            <div className="flex flex-wrap gap-2">
-              {DOCUMENT_OPTIONS.map((doc) => (
-                <button
-                  key={doc}
-                  type="button"
-                  onClick={() => toggleDocument(doc)}
-                  className={`rounded-xl border px-4 py-2 text-xs font-semibold transition ${
-                    form.documents.includes(doc)
-                      ? "border-copper bg-copper/10 text-copper"
-                      : "border-navy/15 text-navy/60 hover:border-copper/50"
-                  }`}
-                >
-                  {doc}
-                </button>
-              ))}
-            </div>
           </div>
         </section>
 
         <button
           type="submit"
           disabled={submitting}
-          className="w-full rounded-xl bg-navy text-white hover:bg-copper py-4 px-4 text-base font-bold transition shadow-sm disabled:opacity-50 cursor-pointer"
+          className="w-full rounded-2xl bg-navy dark:bg-copper hover:bg-copper dark:hover:bg-amber-600 text-white py-4 px-6 font-bold text-base transition shadow-md cursor-pointer disabled:opacity-50"
         >
-          {submitting ? "Yerləşdirilir..." : "Elanı Təsdiq Et və Paylaş"}
+          {submitting ? "Elan yerləşdirilir..." : "Elanı Təsdiqlə və Dərc Et"}
         </button>
       </form>
     </div>
