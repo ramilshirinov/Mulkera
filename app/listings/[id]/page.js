@@ -702,7 +702,30 @@ export default function ListingDetailPage() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
               {relatedListings.map((item) => (
-                <ListingCard key={item.id} listing={item} />
+                <div key={item.id} className="relative group flex flex-col">
+                  {item._matchPercentage && (
+                    <div className="mb-2 flex items-center justify-between gap-1 text-[10px] font-bold px-2.5 py-1 rounded-lg bg-emerald-500/10 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20">
+                      <span className="flex items-center gap-1">
+                        <span>⚡</span> {item._matchPercentage}% Uyğunluq
+                      </span>
+                      {item._meetsTarget && (
+                        <span className="text-[9px] bg-emerald-600 text-white px-1.5 py-0.2 rounded font-extrabold">
+                          DƏQİQ
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  <ListingCard listing={item} />
+                  {item._matchReasons && item._matchReasons.length > 0 && (
+                    <div className="mt-1.5 flex flex-wrap gap-1 px-1">
+                      {item._matchReasons.slice(0, 2).map((r, i) => (
+                        <span key={i} className="text-[9px] text-navy/60 dark:text-slate-400 bg-navy/5 dark:bg-slate-800 px-1.5 py-0.5 rounded">
+                          ✓ {r}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
               ))}
             </div>
           </div>

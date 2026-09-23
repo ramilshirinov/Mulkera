@@ -74,53 +74,68 @@ function ListingsContent() {
 
   // Kateqoriya və Rayonların yüklənməsi
   useEffect(() => {
-    if (!supabase) return;
-    fetchCategories(supabase)
-      .then((data) => {
-        if (data && data.length > 0) setCategories(data);
+    fetch("/api/categories")
+      .then((r) => r.json())
+      .then((json) => {
+        if (json.success && json.data?.length > 0) setCategories(json.data);
         else setCategories(PROPERTY_CATEGORIES);
       })
       .catch(() => setCategories(PROPERTY_CATEGORIES));
 
-    fetchDistricts(supabase)
-      .then((data) => setDistricts(data || []))
+    fetch("/api/districts")
+      .then((r) => r.json())
+      .then((json) => {
+        if (json.success && json.data) setDistricts(json.data);
+      })
       .catch(() => {});
-  }, [supabase]);
+  }, []);
 
   // Elanların yüklənməsi
   useEffect(() => {
-    if (!supabase) return;
     let cancelled = false;
 
     const loadListings = async () => {
       setLoading(true);
       try {
-        let query = supabase
-          .from("listings")
-          .select("*, listing_photos(url, media_type), categories(*), districts(*)");
-
-        if (txType !== "all") {
-          if (txType === "rent") {
-            query = query.neq("transaction_type", "sale");
-          } else {
-            query = query.eq("transaction_type", txType);
+        const res = await fetch(`/api/listings?type=${txType}&sort=${sortBy}`, { cache: "no-store" });
+        if (res.ok) {
+          const json = await res.json();
+          if (!cancelled && json.data) {
+            setListings(json.data);
+            setLoading(false);
+            return;
           }
         }
 
-        if (sortBy === "price_asc") {
-          query = query.order("price", { ascending: true });
-        } else if (sortBy === "price_desc") {
-          query = query.order("price", { ascending: false });
-        } else {
-          query = query.order("is_vip", { ascending: false }).order("created_at", { ascending: false });
-        }
+        // Fallback: Supabase sorğusu
+        if (supabase) {
+          let query = supabase
+            .from("listings")
+            .select("*, listing_photos(url, media_type), categories(*), districts(*)");
 
-        const { data, error } = await query;
-        if (cancelled) return;
-        if (error) {
-          console.error("Elanlar yüklənmədi:", error.message);
-        } else {
-          setListings(data || []);
+          if (txType !== "all") {
+            if (txType === "rent") {
+              query = query.neq("transaction_type", "sale");
+            } else {
+              query = query.eq("transaction_type", txType);
+            }
+          }
+
+          if (sortBy === "price_asc") {
+            query = query.order("price", { ascending: true });
+          } else if (sortBy === "price_desc") {
+            query = query.order("price", { ascending: false });
+          } else {
+            query = query.order("is_vip", { ascending: false }).order("created_at", { ascending: false });
+          }
+
+          const { data, error } = await query;
+          if (cancelled) return;
+          if (error) {
+            console.error("Elanlar yüklənmədi:", error.message);
+          } else {
+            setListings(data || []);
+          }
         }
       } catch (err) {
         console.error("Xəta baş verdi:", err);

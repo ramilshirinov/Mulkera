@@ -138,18 +138,22 @@ export default function LivePage() {
     setComments((prev) => [...prev, giftComment]);
 
     try {
-      await fetch("/api/live", {
+      const res = await fetch("/api/live/gift", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          action: "gift",
           streamId: activeStream.id,
           giftType: gift.id,
           senderName: sender,
           targetSide: selectedSide,
         }),
       });
-      fetchStreams();
+      const data = await res.json();
+      if (data.success && data.data?.stream) {
+        setActiveStream(data.data.stream);
+      } else {
+        fetchStreams();
+      }
     } catch (err) {
       console.error("Hədiyyə xətası:", err);
     }
@@ -193,14 +197,14 @@ export default function LivePage() {
     if (!newTitle.trim()) return;
 
     try {
-      const res = await fetch("/api/live", {
+      const res = await fetch("/api/live/start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          action: "create",
           title: newTitle.trim(),
           description: newDesc.trim(),
-          is_pk: isPkMode,
+          isPk: isPkMode,
+          hostId: user?.id || "r1"
         }),
       });
 

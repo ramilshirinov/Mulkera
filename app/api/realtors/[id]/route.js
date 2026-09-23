@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getRankedRealtors, getDb, saveDb } from "@/lib/backend/db";
+import { getRankedRealtors, getDb, saveDb, enrichListing } from "@/lib/backend/db";
 
 export async function GET(req, { params }) {
   try {
@@ -34,7 +34,7 @@ export async function GET(req, { params }) {
       success: true,
       data: {
         realtor,
-        listings,
+        listings: listings.map((l) => enrichListing(l, db)),
       },
     });
   } catch (err) {
