@@ -6,6 +6,7 @@ import { useApp } from "@/context/AppContext";
 import { fetchCategories, fetchDistricts, localizedField } from "@/lib/listings";
 import ListingCard from "@/components/ListingCard";
 import { PROPERTY_CATEGORIES } from "@/constants/categories";
+import { AZERBAIJAN_REGIONS } from "@/constants/locations";
 import {
   FiSearch,
   FiFilter,
@@ -32,17 +33,44 @@ function ListingsContent() {
   // Filtrlər
   const [search, setSearch] = useState(searchParams.get("search") || "");
   const [txType, setTxType] = useState(searchParams.get("type") || "all");
+  
+  // Əmlak növü və "Digər"
   const [selectedCategory, setSelectedCategory] = useState(
     searchParams.get("category") || "all"
   );
-  const [selectedCity, setSelectedCity] = useState(searchParams.get("city") || "all");
-  const [selectedDistrict, setSelectedDistrict] = useState(
-    searchParams.get("district") || "all"
-  );
+  const [otherCategory, setOtherCategory] = useState("");
+
+  // Dinamik Ərazi İyerarxiyası (Şəhər -> Rayon -> Qəsəbə) və "Digər"
+  const [selectedRegionId, setSelectedRegionId] = useState("all");
+  const [otherCity, setOtherCity] = useState("");
+  
+  const [selectedDistrictId, setSelectedDistrictId] = useState("all");
+  const [otherDistrict, setOtherDistrict] = useState("");
+
+  const [selectedSettlement, setSelectedSettlement] = useState("all");
+  const [otherSettlement, setOtherSettlement] = useState("");
+
+  // Digər filtrlər
   const [rooms, setRooms] = useState(searchParams.get("rooms") || "all");
   const [minPrice, setMinPrice] = useState(searchParams.get("min_price") || "");
   const [maxPrice, setMaxPrice] = useState(searchParams.get("max_price") || "");
+  
+  // Torpaq sahəsi (sot) filtri
+  const [minLandSot, setMinLandSot] = useState(searchParams.get("min_sot") || "");
+  const [maxLandSot, setMaxLandSot] = useState(searchParams.get("max_sot") || "");
+
   const [sortBy, setSortBy] = useState("newest");
+
+  // Seçilmiş region obyektini tapmaq
+  const activeRegion = useMemo(() => {
+    return AZERBAIJAN_REGIONS.find((r) => r.id === selectedRegionId) || null;
+  }, [selectedRegionId]);
+
+  // Seçilmiş rayona uyğun qəsəbələr
+  const activeDistrict = useMemo(() => {
+    if (!activeRegion) return null;
+    return activeRegion.districts.find((d) => d.id === selectedDistrictId) || null;
+  }, [activeRegion, selectedDistrictId]);
 
   // Kateqoriya və Rayonların yüklənməsi
   useEffect(() => {
@@ -59,7 +87,7 @@ function ListingsContent() {
       .catch(() => {});
   }, [supabase]);
 
-  // Elanların Supabase-dən yüklənməsi
+  // Elanların yüklənməsi
   useEffect(() => {
     if (!supabase) return;
     let cancelled = false;
@@ -111,7 +139,7 @@ function ListingsContent() {
   // Client-side axtarış və detallı filtrləmə
   const filteredListings = useMemo(() => {
     return listings.filter((l) => {
-      // Mətn axtarışı (başlıq və ya ünvan)
+      // 1. Mətn axtarışı (başlıq və ya ünvan)
       if (search.trim()) {
         const term = search.toLowerCase().trim();
         const title = (localizedField(l, "title", currentLocale) || l.title || "").toLowerCase();
@@ -122,25 +150,74 @@ function ListingsContent() {
         }
       }
 
-      // Kateqoriya filtri
+      // 2. Kateqoriya və "Digər"
       if (selectedCategory !== "all") {
-        const catMatch =
-          String(l.category_id) === selectedCategory ||
-          l.categories?.slug === selectedCategory ||
-          String(l.property_type).toLowerCase() === selectedCategory.toLowerCase();
-        if (!catMatch) return false;
+        if (selectedCategory === "other") {
+          if (otherCategory.trim()) {
+            const oc = otherCategory.toLowerCase().trim();
+            const catName = (l.categories?.name || l.property_type || "").toLowerCase();
+            if (!catName.includes(oc)) return false;
+          }
+        } else {
+          const catMatch =
+            String(l.category_id) === selectedCategory ||
+            l.categories?.slug === selectedCategory ||
+            String(l.property_type).toLowerCase() === selectedCategory.toLowerCase();
+          if (!catMatch) return false;
+        }
       }
 
-      // Şəhər / Rayon
-      if (selectedDistrict !== "all") {
-        const distMatch =
-          String(l.district_id) === selectedDistrict ||
-          String(l.districts?.id) === selectedDistrict ||
-          String(l.district_name || "").toLowerCase().includes(selectedDistrict.toLowerCase());
-        if (!distMatch) return false;
+      // 3. Ərazi İyerarxiyası: Şəhər / Region
+      if (selectedRegionId !== "all") {
+        if (selectedRegionId === "other") {
+          if (otherCity.trim()) {
+            const cityTerm = otherCity.toLowerCase().trim();
+            const addr = (l.address || "").toLowerCase();
+            const dist = (l.districts?.name || l.district_name || "").toLowerCase();
+            if (!addr.includes(cityTerm) && !dist.includes(cityTerm)) return false;
+          }
+        } else if (activeRegion) {
+          const regionName = activeRegion.name.toLowerCase();
+          const addr = (l.address || "").toLowerCase();
+          const dist = (l.districts?.name || l.district_name || "").toLowerCase();
+          const matchesRegion = addr.includes(regionName) || dist.includes(regionName) || (selectedRegionId === "baku" && (dist.includes("rayon") || addr.includes("bakı")));
+          if (!matchesRegion) return false;
+        }
       }
 
-      // Otaq sayı
+      // 4. Ərazi İyerarxiyası: Rayon
+      if (selectedDistrictId !== "all") {
+        if (selectedDistrictId === "other") {
+          if (otherDistrict.trim()) {
+            const distTerm = otherDistrict.toLowerCase().trim();
+            const addr = (l.address || "").toLowerCase();
+            const dist = (l.districts?.name || l.district_name || "").toLowerCase();
+            if (!addr.includes(distTerm) && !dist.includes(distTerm)) return false;
+          }
+        } else if (activeDistrict) {
+          const dName = activeDistrict.name.toLowerCase().replace(" rayonu", "").replace(" şəhəri", "");
+          const addr = (l.address || "").toLowerCase();
+          const dist = (l.districts?.name || l.district_name || "").toLowerCase();
+          if (!addr.includes(dName) && !dist.includes(dName)) return false;
+        }
+      }
+
+      // 5. Ərazi İyerarxiyası: Qəsəbə / Mikrorayon
+      if (selectedSettlement !== "all") {
+        if (selectedSettlement === "other") {
+          if (otherSettlement.trim()) {
+            const settTerm = otherSettlement.toLowerCase().trim();
+            const addr = (l.address || "").toLowerCase();
+            if (!addr.includes(settTerm)) return false;
+          }
+        } else {
+          const settTerm = selectedSettlement.toLowerCase();
+          const addr = (l.address || "").toLowerCase();
+          if (!addr.includes(settTerm)) return false;
+        }
+      }
+
+      // 6. Otaq sayı
       if (rooms !== "all") {
         const rc = Number(l.room_count || l.rooms || 0);
         if (rooms === "4+" ? rc < 4 : rc !== Number(rooms)) {
@@ -148,22 +225,54 @@ function ListingsContent() {
         }
       }
 
-      // Qiymət aralığı
+      // 7. Qiymət aralığı
       if (minPrice && Number(l.price) < Number(minPrice)) return false;
       if (maxPrice && Number(l.price) > Number(maxPrice)) return false;
 
+      // 8. Torpaq sahəsi (sot və ya m2)
+      const landSot = Number(l.yard_sot || l.land_area_sot || (l.area_m2 ? l.area_m2 / 100 : 0));
+      if (minLandSot && landSot < Number(minLandSot)) return false;
+      if (maxLandSot && landSot > Number(maxLandSot)) return false;
+
       return true;
     });
-  }, [listings, search, selectedCategory, selectedDistrict, rooms, minPrice, maxPrice, currentLocale]);
+  }, [
+    listings,
+    search,
+    selectedCategory,
+    otherCategory,
+    selectedRegionId,
+    otherCity,
+    selectedDistrictId,
+    otherDistrict,
+    selectedSettlement,
+    otherSettlement,
+    activeRegion,
+    activeDistrict,
+    rooms,
+    minPrice,
+    maxPrice,
+    minLandSot,
+    maxLandSot,
+    currentLocale
+  ]);
 
   const handleReset = () => {
     setSearch("");
     setTxType("all");
     setSelectedCategory("all");
-    setSelectedDistrict("all");
+    setOtherCategory("");
+    setSelectedRegionId("all");
+    setOtherCity("");
+    setSelectedDistrictId("all");
+    setOtherDistrict("");
+    setSelectedSettlement("all");
+    setOtherSettlement("");
     setRooms("all");
     setMinPrice("");
     setMaxPrice("");
+    setMinLandSot("");
+    setMaxLandSot("");
     setSortBy("newest");
   };
 
@@ -177,7 +286,7 @@ function ListingsContent() {
               Bütün Elanlar
             </h1>
             <p className="text-sm text-navy/60 dark:text-slate-400 mt-1 font-medium">
-              Bakı və bölgələrdə aktual daşınmaz əmlak elanları kataloqu
+              Azərbaycanın bütün şəhər, rayon və qəsəbələrində dəqiq ərazi iyerarxiyası ilə axtarış
             </p>
           </div>
 
@@ -205,23 +314,24 @@ function ListingsContent() {
           </div>
         </div>
 
-        {/* Əsas Filtr Paneli */}
+        {/* Əsas Genişləndirilmiş Filtr Paneli */}
         <div
-          className={`bg-white dark:bg-slate-900 rounded-2xl p-5 shadow-card border border-navy/10 dark:border-slate-800 space-y-4 ${
+          className={`bg-white dark:bg-slate-900 rounded-2xl p-5 sm:p-6 shadow-card border border-navy/10 dark:border-slate-800 space-y-5 ${
             showFilters ? "block" : "hidden md:block"
           }`}
         >
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* 1-ci Sıra: Açar söz, Əməliyyat və Əmlak növü */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {/* Axtarış sahəsi */}
             <div className="relative">
               <label className="block text-xs font-bold text-navy/70 dark:text-slate-300 mb-1.5">
-                Axtarış
+                Açar Söz və ya Ünvan
               </label>
               <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-navy/15 dark:border-slate-700">
                 <FiSearch className="text-copper shrink-0" />
                 <input
                   type="text"
-                  placeholder="Başlıq, ünvan və ya açar söz..."
+                  placeholder="Məsələn: 28 May, dəniz mənzərəsi, həyət evi..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   className="w-full bg-transparent text-xs outline-none text-navy dark:text-slate-100 placeholder:text-navy/40 dark:placeholder:text-slate-500 font-medium"
@@ -246,7 +356,7 @@ function ListingsContent() {
               </select>
             </div>
 
-            {/* Əmlak növü */}
+            {/* Əmlak növü (Digər variantı ilə) */}
             <div>
               <label className="block text-xs font-bold text-navy/70 dark:text-slate-300 mb-1.5">
                 Əmlak Növü
@@ -262,30 +372,135 @@ function ListingsContent() {
                     {localizedField(c, "name", currentLocale) || c.name || c.name_az}
                   </option>
                 ))}
+                <option value="other">✍️ Digər (Əl ilə daxil et)</option>
               </select>
-            </div>
 
-            {/* Rayon / Bölgə */}
-            <div>
-              <label className="block text-xs font-bold text-navy/70 dark:text-slate-300 mb-1.5">
-                Rayon / Ərazi
-              </label>
-              <select
-                value={selectedDistrict}
-                onChange={(e) => setSelectedDistrict(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-navy/15 dark:border-slate-700 text-xs text-navy dark:text-slate-100 outline-none font-semibold cursor-pointer"
-              >
-                <option value="all">Bütün Rayonlar</option>
-                {districts.map((d) => (
-                  <option key={d.id} value={String(d.id)}>
-                    {localizedField(d, "name", currentLocale) || d.name}
-                  </option>
-                ))}
-              </select>
+              {selectedCategory === "other" && (
+                <input
+                  type="text"
+                  placeholder="Məsələn: Mansard, Dupleks, Anbar..."
+                  value={otherCategory}
+                  onChange={(e) => setOtherCategory(e.target.value)}
+                  className="mt-2 w-full px-3 py-2 rounded-xl bg-amber-50/50 dark:bg-amber-950/20 border border-amber-500/40 text-xs text-navy dark:text-slate-100 outline-none placeholder:text-navy/40"
+                />
+              )}
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2 border-t border-navy/5 dark:border-slate-800">
+          {/* 2-ci Sıra: Tam Dinamik Ərazi İyerarxiyası (Şəhər / Region -> Rayon -> Qəsəbə / Ərazi) */}
+          <div className="pt-3 border-t border-navy/5 dark:border-slate-800 space-y-2">
+            <span className="text-[11px] font-bold text-copper uppercase tracking-wider block">
+              📍 Dəqiq Ərazi İyerarxiyası
+            </span>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {/* 1. Şəhər / Region */}
+              <div>
+                <label className="block text-xs font-bold text-navy/70 dark:text-slate-300 mb-1.5">
+                  1. Şəhər / Bölgə
+                </label>
+                <select
+                  value={selectedRegionId}
+                  onChange={(e) => {
+                    setSelectedRegionId(e.target.value);
+                    setSelectedDistrictId("all");
+                    setSelectedSettlement("all");
+                  }}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-navy/15 dark:border-slate-700 text-xs text-navy dark:text-slate-100 outline-none font-semibold cursor-pointer"
+                >
+                  <option value="all">Bütün Azərbaycan</option>
+                  {AZERBAIJAN_REGIONS.map((reg) => (
+                    <option key={reg.id} value={reg.id}>
+                      {reg.name}
+                    </option>
+                  ))}
+                  <option value="other">✍️ Digər Şəhər / Bölgə</option>
+                </select>
+
+                {selectedRegionId === "other" && (
+                  <input
+                    type="text"
+                    placeholder="Şəhəri və ya bölgəni qeyd edin..."
+                    value={otherCity}
+                    onChange={(e) => setOtherCity(e.target.value)}
+                    className="mt-2 w-full px-3 py-2 rounded-xl bg-amber-50/50 dark:bg-amber-950/20 border border-amber-500/40 text-xs text-navy dark:text-slate-100 outline-none placeholder:text-navy/40"
+                  />
+                )}
+              </div>
+
+              {/* 2. Rayon */}
+              <div>
+                <label className="block text-xs font-bold text-navy/70 dark:text-slate-300 mb-1.5">
+                  2. Rayon
+                </label>
+                <select
+                  value={selectedDistrictId}
+                  onChange={(e) => {
+                    setSelectedDistrictId(e.target.value);
+                    setSelectedSettlement("all");
+                  }}
+                  disabled={selectedRegionId === "other"}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-navy/15 dark:border-slate-700 text-xs text-navy dark:text-slate-100 outline-none font-semibold cursor-pointer disabled:opacity-50"
+                >
+                  <option value="all">
+                    {activeRegion ? `Bütün ${activeRegion.name} rayonları` : "Bütün Rayonlar"}
+                  </option>
+                  {activeRegion?.districts.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.name}
+                    </option>
+                  ))}
+                  <option value="other">✍️ Digər Rayon</option>
+                </select>
+
+                {selectedDistrictId === "other" && (
+                  <input
+                    type="text"
+                    placeholder="Rayon adını qeyd edin..."
+                    value={otherDistrict}
+                    onChange={(e) => setOtherDistrict(e.target.value)}
+                    className="mt-2 w-full px-3 py-2 rounded-xl bg-amber-50/50 dark:bg-amber-950/20 border border-amber-500/40 text-xs text-navy dark:text-slate-100 outline-none placeholder:text-navy/40"
+                  />
+                )}
+              </div>
+
+              {/* 3. Qəsəbə / Mikrorayon / Metro */}
+              <div>
+                <label className="block text-xs font-bold text-navy/70 dark:text-slate-300 mb-1.5">
+                  3. Qəsəbə / Mikrorayon / Metro
+                </label>
+                <select
+                  value={selectedSettlement}
+                  onChange={(e) => setSelectedSettlement(e.target.value)}
+                  disabled={!activeDistrict}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-navy/15 dark:border-slate-700 text-xs text-navy dark:text-slate-100 outline-none font-semibold cursor-pointer disabled:opacity-50"
+                >
+                  <option value="all">
+                    {activeDistrict ? `Bütün ${activeDistrict.name} qəsəbələri` : "Əvvəlcə rayon seçin"}
+                  </option>
+                  {activeDistrict?.settlements?.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                  <option value="other">✍️ Digər Qəsəbə / Ərazi</option>
+                </select>
+
+                {selectedSettlement === "other" && (
+                  <input
+                    type="text"
+                    placeholder="Qəsəbə və ya massiv adını qeyd edin..."
+                    value={otherSettlement}
+                    onChange={(e) => setOtherSettlement(e.target.value)}
+                    className="mt-2 w-full px-3 py-2 rounded-xl bg-amber-50/50 dark:bg-amber-950/20 border border-amber-500/40 text-xs text-navy dark:text-slate-100 outline-none placeholder:text-navy/40"
+                  />
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* 3-cü Sıra: Otaq sayı, Qiymət aralığı və Torpaq sahəsi (sot) */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-3 border-t border-navy/5 dark:border-slate-800">
             {/* Otaq sayı */}
             <div>
               <label className="block text-xs font-bold text-navy/70 dark:text-slate-300 mb-1.5">
@@ -297,7 +512,7 @@ function ListingsContent() {
                     key={r}
                     type="button"
                     onClick={() => setRooms(r)}
-                    className={`flex-1 py-1.5 rounded-lg text-xs font-semibold text-center border transition ${
+                    className={`flex-1 py-1.5 rounded-lg text-xs font-semibold text-center border transition cursor-pointer ${
                       rooms === r
                         ? "bg-navy text-white border-navy dark:bg-copper dark:border-copper"
                         : "bg-slate-50 dark:bg-slate-800 text-navy dark:text-slate-200 border-navy/10 dark:border-slate-700 hover:border-copper"
@@ -333,19 +548,46 @@ function ListingsContent() {
               </div>
             </div>
 
-            {/* Əməliyyat və Sıfırlama */}
-            <div className="flex items-end justify-between sm:justify-end gap-3">
-              <button
-                type="button"
-                onClick={handleReset}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-xl border border-navy/15 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-semibold text-navy dark:text-slate-200 hover:border-copper hover:text-copper transition cursor-pointer"
-              >
-                <FiRotateCcw /> Sıfırla
-              </button>
-              <span className="text-xs font-bold text-navy/80 dark:text-slate-300">
-                Tapıldı: <strong className="text-copper">{filteredListings.length}</strong> elan
-              </span>
+            {/* Torpaq sahəsi (sot) filtri */}
+            <div>
+              <label className="block text-xs font-bold text-navy/70 dark:text-slate-300 mb-1.5">
+                Həyət / Torpaq Sahəsi (Sot)
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  step="0.5"
+                  placeholder="Min sot"
+                  value={minLandSot}
+                  onChange={(e) => setMinLandSot(e.target.value)}
+                  className="w-1/2 px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-navy/15 dark:border-slate-700 text-xs text-navy dark:text-slate-100 outline-none"
+                />
+                <span className="text-navy/30 dark:text-slate-500 text-xs">-</span>
+                <input
+                  type="number"
+                  step="0.5"
+                  placeholder="Max sot"
+                  value={maxLandSot}
+                  onChange={(e) => setMaxLandSot(e.target.value)}
+                  className="w-1/2 px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-navy/15 dark:border-slate-700 text-xs text-navy dark:text-slate-100 outline-none"
+                />
+              </div>
             </div>
+          </div>
+
+          {/* Əməliyyat və Sıfırlama Paneli */}
+          <div className="flex items-center justify-between pt-2 border-t border-navy/5 dark:border-slate-800">
+            <span className="text-xs font-bold text-navy/80 dark:text-slate-300">
+              Tapıldı: <strong className="text-copper text-sm">{filteredListings.length}</strong> aktual elan
+            </span>
+
+            <button
+              type="button"
+              onClick={handleReset}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-xl border border-navy/15 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-semibold text-navy dark:text-slate-200 hover:border-copper hover:text-copper transition cursor-pointer"
+            >
+              <FiRotateCcw /> Filtrləri Sıfırla
+            </button>
           </div>
         </div>
 

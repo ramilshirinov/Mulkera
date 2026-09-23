@@ -43,6 +43,40 @@ export default function ListingDetailPage() {
   const [reportSent, setReportSent] = useState(false);
   const [reporting, setReporting] = useState(false);
 
+  // VIP Önə Çəkmə Modalı State
+  const [showVipModal, setShowVipModal] = useState(false);
+  const [selectedVipPackage, setSelectedVipPackage] = useState("vip-15");
+  const [vipLoading, setVipLoading] = useState(false);
+  const [vipSuccessMessage, setVipSuccessMessage] = useState("");
+
+  const handleActivateVip = async () => {
+    setVipLoading(true);
+    try {
+      const res = await fetch("/api/vip", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          listingId: listing.id,
+          packageId: selectedVipPackage,
+          paymentMethod: "card"
+        })
+      });
+      const result = await res.json();
+      if (result.success) {
+        setListing(result.listing);
+        setVipSuccessMessage(result.message || "Elanınız uğurla VIP statusuna yüksəldildi!");
+        setTimeout(() => {
+          setShowVipModal(false);
+          setVipSuccessMessage("");
+        }, 2000);
+      }
+    } catch (err) {
+      console.error("VIP xətası:", err);
+    } finally {
+      setVipLoading(false);
+    }
+  };
+
   // Link kopyalandı bildirişi
   const [copied, setCopied] = useState(false);
 
@@ -57,51 +91,18 @@ export default function ListingDetailPage() {
       setLoading(true);
       setFetchError(null);
       try {
-        const { data, error } = await supabase
-          .from("listings")
-          .select(`
-            *,
-            listing_photos (*),
-            categories (*),
-            districts (*)
-          `)
-          .eq("id", id)
-          .maybeSingle();
+        const res = await fetch(`/api/listings/${id}`, { cache: "no-store" });
+        const json = await res.json();
 
-        if (error) {
-          console.error("Elan sorğusunda xəta:", error.message);
-          setFetchError(error);
+        if (!res.ok || !json.data) {
           setListing(null);
-        } else if (data) {
-          let listingData = data;
-
-          // Əgər elanın user_id və ya owner_id-si varsa profilini çəkək
-          const ownerUid = listingData.owner_id || listingData.user_id;
-          if (ownerUid) {
-            const { data: profileData } = await supabase
-              .from("profiles")
-              .select("*")
-              .eq("id", ownerUid)
-              .maybeSingle();
-            listingData.profiles = profileData || null;
-          }
-
-          setListing(listingData);
-
-          // Oxşar elanlar
-          let query = supabase
-            .from("listings")
-            .select("*, listing_photos(*), categories(*), districts(*)")
-            .neq("id", id);
-
-          if (listingData.category_id) {
-            query = query.eq("category_id", listingData.category_id);
-          }
-
-          const { data: related } = await query.limit(3);
-          setRelatedListings(related || []);
+          setFetchError(new Error(json.message || "Elan tapılmadı"));
         } else {
-          setListing(null);
+          setListing(json.data);
+          setRelatedListings(json.related || []);
+
+          // Baxış sayını artır
+          fetch(`/api/listings/${id}/view`, { method: "POST" }).catch(() => {});
         }
       } catch (err) {
         console.error("Gözlənilməz xəta:", err);
@@ -112,10 +113,8 @@ export default function ListingDetailPage() {
       }
     }
 
-    if (supabase) {
-      fetchListingDetail();
-    }
-  }, [id, supabase]);
+    fetchListingDetail();
+  }, [id]);
 
   const handleFavoriteClick = async () => {
     const result = await toggleFavorite();
@@ -138,8 +137,9 @@ export default function ListingDetailPage() {
     }
     setDeleting(true);
     try {
-      const { error } = await supabase.from("listings").delete().eq("id", id);
-      if (error) throw error;
+      const res = await fetch(`/api/listings/${id}`, { method: "DELETE" });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.message || "Elanı silmək mümkün olmadı");
       alert("Elan uğurla silindi.");
       router.push("/listings");
     } catch (err) {
@@ -582,32 +582,51 @@ export default function ListingDetailPage() {
                 {isAgency ? "Vasitəçi Agentlik / Rieltor" : "Mülk Sahibi"}
               </h3>
               
-              <div className="flex items-center gap-4">
-                <div className="w-16 h-16 rounded-2xl bg-navy/10 dark:bg-slate-800 flex items-center justify-center font-bold text-navy dark:text-white text-xl overflow-hidden border border-navy/10 dark:border-slate-700 shrink-0">
-                  {listing.profiles?.avatar_url ? (
-                    <img src={listing.profiles.avatar_url} alt="Profile" className="w-full h-full object-cover" />
-                  ) : (
-                    <span>{listing.profiles?.full_name?.[0] || "M"}</span>
-                  )}
-                </div>
-                <div className="min-w-0">
-                  <h4 className="font-bold text-navy dark:text-white flex items-center gap-1 truncate text-base">
-                    {listing.profiles?.full_name || "Mülkera İstifadəçisi"}
-                    {isAgency && <FiCheckCircle className="text-emerald-500 text-sm shrink-0" />}
-                  </h4>
-                  <p className="text-xs text-navy/60 dark:text-slate-400 mt-0.5 truncate">
-                    {listing.profiles?.agency_name || (isAgency ? "Rieltor Agentliyi" : "Mülkiyyətçi")}
-                  </p>
-                  {listing.profiles && (
+              {/* Elan Sahibi Profili */}
+              {(() => {
+                const ownerProfileId = listing.profiles?.id || listing.owner_id || listing.user_id || "r1";
+                return (
+                  <div className="flex items-center gap-4">
                     <Link
-                      href={`/realtors/${listing.profiles.id}`}
-                      className="text-[11px] font-bold text-copper hover:underline mt-1 inline-block"
+                      href={`/realtors/${ownerProfileId}`}
+                      className="w-16 h-16 rounded-2xl bg-navy/10 dark:bg-slate-800 flex items-center justify-center font-bold text-navy dark:text-white text-xl overflow-hidden border border-navy/10 dark:border-slate-700 shrink-0 hover:border-copper transition"
                     >
-                      Bütün elanlarına bax →
+                      {listing.profiles?.avatar_url ? (
+                        <img src={listing.profiles.avatar_url} alt="Profile" className="w-full h-full object-cover" />
+                      ) : (
+                        <span>{listing.profiles?.full_name?.[0] || "M"}</span>
+                      )}
                     </Link>
-                  )}
-                </div>
-              </div>
+                    <div className="min-w-0">
+                      <Link
+                        href={`/realtors/${ownerProfileId}`}
+                        className="font-bold text-navy dark:text-white flex items-center gap-1 truncate text-base hover:text-copper transition"
+                      >
+                        {listing.profiles?.full_name || "Mülkera Rieltoru"}
+                        {isAgency && <FiCheckCircle className="text-emerald-500 text-sm shrink-0" />}
+                      </Link>
+                      <p className="text-xs text-navy/60 dark:text-slate-400 mt-0.5 truncate">
+                        {listing.profiles?.agency_name || (isAgency ? "Rieltor Agentliyi" : "Mülkiyyətçi")}
+                      </p>
+                      <Link
+                        href={`/realtors/${ownerProfileId}`}
+                        className="text-[11px] font-bold text-copper hover:underline mt-1 inline-block"
+                      >
+                        Profilə və bütün elanlarına bax →
+                      </Link>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* VIP Önə Çəkmə Düyməsi */}
+              <button
+                type="button"
+                onClick={() => setShowVipModal(true)}
+                className="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-600 text-white hover:from-amber-600 hover:to-yellow-600 py-3 px-4 text-xs font-extrabold transition shadow-md cursor-pointer"
+              >
+                <span>👑</span> {listing.is_vip ? "VIP Statusunu Yenilə" : "⚡ Elanı VIP Et / Önə Çək"}
+              </button>
 
               {/* Zəng və WhatsApp Düymələri */}
               <div className="space-y-3 pt-2">
@@ -641,6 +660,12 @@ export default function ListingDetailPage() {
                   </span>
                 </div>
                 <div className="flex justify-between">
+                  <span>Status:</span>
+                  <span className={`font-bold ${listing.is_vip ? "text-amber-500" : "text-emerald-500"}`}>
+                    {listing.is_vip ? "👑 VIP Elan" : "Standart"}
+                  </span>
+                </div>
+                <div className="flex justify-between">
                   <span>Yerləşdirilmə:</span>
                   <span className="font-bold text-navy dark:text-white">
                     {listing.created_at ? new Date(listing.created_at).toLocaleDateString("az-AZ") : "Bu gün"}
@@ -658,13 +683,24 @@ export default function ListingDetailPage() {
 
         </div>
 
-        {/* Oxşar Elanlar */}
+        {/* Oxşar Elanlar (Eyni məkanda, yaxın qiymət, oxşar sahə) */}
         {relatedListings.length > 0 && (
           <div className="mt-16 pt-10 border-t border-navy/10 dark:border-slate-800 space-y-6">
-            <h3 className="text-2xl font-bold font-heading text-navy dark:text-white">
-              Oxşar Elanlar
-            </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h3 className="text-2xl font-bold font-heading text-navy dark:text-white flex items-center gap-2">
+                  <span>🎯</span> Oxşar və Əlaqədar Elanlar
+                </h3>
+                <p className="text-xs text-navy/60 dark:text-slate-400 mt-1">
+                  Eyni məkanda ({listing.districts?.name || listing.district_name || "Bakı"}), yaxın qiymət aralığında və oxşar sahəyə malik elanlar
+                </p>
+              </div>
+              <span className="self-start sm:self-auto text-[11px] font-bold px-3 py-1.5 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 flex items-center gap-1.5">
+                <FiCheckCircle /> Ağıllı Uyğunluq Alqoritmi
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
               {relatedListings.map((item) => (
                 <ListingCard key={item.id} listing={item} />
               ))}
@@ -789,6 +825,129 @@ export default function ListingDetailPage() {
                     </button>
                   </div>
                 </form>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* VIP Önə Çəkmə və Paket Seçimi Modalı */}
+        {showVipModal && (
+          <div className="fixed inset-0 z-50 bg-navy/70 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-lg w-full p-6 sm:p-7 border border-navy/10 dark:border-slate-800 shadow-2xl space-y-5">
+              <div className="flex items-center justify-between border-b border-navy/10 dark:border-slate-800 pb-3">
+                <div className="flex items-center gap-2">
+                  <span className="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center text-lg font-bold">
+                    👑
+                  </span>
+                  <div>
+                    <h3 className="font-bold text-base text-navy dark:text-white">
+                      Elanı VIP Et və Önə Çək
+                    </h3>
+                    <p className="text-[11px] text-navy/60 dark:text-slate-400">
+                      Elanınızı ən üst mövqeyə çıxararaq 5 qata qədər daha çox alıcı cəlb edin
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowVipModal(false)}
+                  className="text-navy/50 hover:text-navy dark:text-slate-400 dark:hover:text-white cursor-pointer"
+                >
+                  <FiX size={20} />
+                </button>
+              </div>
+
+              {vipSuccessMessage ? (
+                <div className="p-6 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 text-center space-y-2">
+                  <div className="text-3xl">🎉</div>
+                  <h4 className="font-bold text-sm">{vipSuccessMessage}</h4>
+                  <p className="text-xs text-emerald-600/80 dark:text-emerald-400/80">
+                    Elanınız dərhal saytın ən üst pilləsinə yerləşdirildi!
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <label className="block text-xs font-bold text-navy/80 dark:text-slate-300">
+                    VIP İrəliləyiş Paketini Seçin:
+                  </label>
+
+                  <div className="space-y-2.5">
+                    {[
+                      { id: "vip-7", name: "7 Günlük Express VIP", days: 7, price: 15, tag: "Təcili Satış" },
+                      { id: "vip-15", name: "15 Günlük Pro VIP", days: 15, price: 29, is_popular: true, tag: "Ən Populyar" },
+                      { id: "vip-30", name: "30 Günlük Super VIP Vitrin", days: 30, price: 49, tag: "Maksimum Görünürlük" }
+                    ].map((pkg) => {
+                      const isSelected = selectedVipPackage === pkg.id;
+                      return (
+                        <div
+                          key={pkg.id}
+                          onClick={() => setSelectedVipPackage(pkg.id)}
+                          className={`p-3.5 rounded-2xl border-2 transition cursor-pointer flex items-center justify-between ${
+                            isSelected
+                              ? "border-amber-500 bg-amber-50/50 dark:bg-amber-950/20"
+                              : "border-navy/10 dark:border-slate-800 hover:border-amber-500/40"
+                          }`}
+                        >
+                          <div className="space-y-0.5">
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-xs text-navy dark:text-white">{pkg.name}</span>
+                              {pkg.tag && (
+                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
+                                  pkg.is_popular
+                                    ? "bg-amber-500 text-white"
+                                    : "bg-navy/5 text-navy/70 dark:bg-slate-800 dark:text-slate-300"
+                                }`}>
+                                  {pkg.tag}
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[11px] text-navy/60 dark:text-slate-400">
+                              {pkg.days} gün boyunca axtarış və kateqoriyalarda zirvədə nümayiş
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-base font-extrabold font-heading text-navy dark:text-white">
+                              {pkg.price} AZN
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-navy/5 dark:border-slate-700 text-[11px] text-navy/70 dark:text-slate-300 space-y-1">
+                    <p className="font-bold flex items-center gap-1 text-navy dark:text-white">
+                      <span>💳</span> Təhlükəsiz Ödəniş Üsulu:
+                    </p>
+                    <p>Bütün Visa, MasterCard və Birbank / Tamkart ilə komissiyasız dərhal aktivləşir.</p>
+                  </div>
+
+                  <div className="flex items-center justify-end gap-3 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowVipModal(false)}
+                      className="px-4 py-2.5 rounded-xl border border-navy/15 dark:border-slate-700 text-xs font-semibold text-navy dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition cursor-pointer"
+                    >
+                      Bağla
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleActivateVip}
+                      disabled={vipLoading}
+                      className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 text-white text-xs font-extrabold shadow-md hover:from-amber-600 hover:to-yellow-600 transition cursor-pointer disabled:opacity-60 flex items-center gap-2"
+                    >
+                      {vipLoading ? (
+                        <>
+                          <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          Aktivləşdirilir...
+                        </>
+                      ) : (
+                        <>
+                          <span>👑</span> İndi VIP Et və Önə Çək
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
               )}
             </div>
           </div>

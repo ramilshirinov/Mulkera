@@ -21,14 +21,14 @@ import {
 } from "react-icons/fi";
 
 export default function ProfilePage() {
-  const { user, supabase } = useApp();
+  const { user, profile, supabase, logout, updateProfile } = useApp();
   const router = useRouter();
 
   const [form, setForm] = useState({
     full_name: "",
     phone: "",
     avatar_url: "",
-    agency_name: "RF Master Sales Agency",
+    agency_name: "MÜLKERA Real Estate",
     facebook_url: "",
     instagram_url: "",
     whatsapp: "",
@@ -57,56 +57,26 @@ export default function ProfilePage() {
       return;
     }
 
-    async function fetchProfile() {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", user.id)
-        .single();
-
-      if (!error && data) {
-        setForm({
-          full_name: data.full_name || "",
-          phone: data.phone || "",
-          avatar_url: data.avatar_url || "",
-          agency_name: data.agency_name || "RF Master Sales Agency",
-          facebook_url: data.facebook_url || "",
-          instagram_url: data.instagram_url || "",
-          whatsapp: data.whatsapp || "",
-          email_notifications:
-            data.email_notifications !== null && data.email_notifications !== undefined
-              ? data.email_notifications
-              : true,
-          sms_notifications: data.sms_notifications || false,
-        });
-      }
-      setLoading(false);
-    }
+    // Profil məlumatlarını təyin edirik
+    setForm({
+      full_name: profile?.full_name || user?.user_metadata?.full_name || "",
+      phone: profile?.phone || user?.phone || "",
+      avatar_url: profile?.avatar_url || "",
+      agency_name: profile?.agency_name || "MÜLKERA Real Estate",
+      facebook_url: profile?.facebook_url || "",
+      instagram_url: profile?.instagram_url || "",
+      whatsapp: profile?.whatsapp || "",
+      email_notifications: profile?.email_notifications ?? true,
+      sms_notifications: profile?.sms_notifications ?? false,
+    });
+    setLoading(false);
 
     async function fetchMyListings() {
       setListingsLoading(true);
       try {
-        // Məhdudiyyətsiz (single və limit olmadan) istifadəçinin bütün elanlarını gətiririk
-        let { data, error } = await supabase
-          .from("listings")
-          .select("*, listing_photos(*), categories(*), districts(*)")
-          .eq("owner_id", user.id)
-          .order("created_at", { ascending: false });
-
-        if ((!data || data.length === 0) && !error) {
-          const res = await supabase
-            .from("listings")
-            .select("*, listing_photos(*), categories(*), districts(*)")
-            .eq("user_id", user.id)
-            .order("created_at", { ascending: false });
-          if (res.data && res.data.length > 0) {
-            data = res.data;
-          }
-        }
-
-        if (data) {
-          setMyListings(data);
-        }
+        const res = await fetch(`/api/listings?owner_id=${user.id}`);
+        const json = await res.json();
+        setMyListings(json.data || []);
       } catch (err) {
         console.error("Elanlarım yüklənmədi:", err);
       } finally {
@@ -114,9 +84,8 @@ export default function ProfilePage() {
       }
     }
 
-    fetchProfile();
     fetchMyListings();
-  }, [user, supabase, router]);
+  }, [user, profile, router]);
 
   const handleAvatarUpload = async (e) => {
     try {
@@ -124,19 +93,18 @@ export default function ProfilePage() {
       const file = e.target.files[0];
       if (!file) return;
 
-      const fileExt = file.name.split(".").pop();
-      const fileName = `${user.id}-${Math.random()}.${fileExt}`;
-      const filePath = `avatars/${fileName}`;
+      const formData = new FormData();
+      formData.append("file", file);
 
-      const { error: uploadError } = await supabase.storage
-        .from("listings-media")
-        .upload(filePath, file);
-
-      if (uploadError) throw uploadError;
-
-      const { data } = supabase.storage.from("listings-media").getPublicUrl(filePath);
-      setForm({ ...form, avatar_url: data.publicUrl });
-      alert("Profil şəkli yükləndi!");
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      });
+      const json = await res.json();
+      if (json.success && json.url) {
+        setForm((prev) => ({ ...prev, avatar_url: json.url }));
+        alert("Profil şəkli yükləndi!");
+      }
     } catch (error) {
       alert("Şəkil yüklənərkən xəta: " + error.message);
     } finally {
@@ -148,9 +116,8 @@ export default function ProfilePage() {
     e.preventDefault();
     setSaving(true);
 
-    const { error } = await supabase
-      .from("profiles")
-      .update({
+    try {
+      await updateProfile({
         full_name: form.full_name,
         phone: form.phone,
         avatar_url: form.avatar_url,
@@ -160,16 +127,12 @@ export default function ProfilePage() {
         whatsapp: form.whatsapp,
         email_notifications: form.email_notifications,
         sms_notifications: form.sms_notifications,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", user.id);
-
-    setSaving(false);
-
-    if (error) {
-      alert("Yenilənmə xətası: " + error.message);
-    } else {
+      });
       alert("Profil uğurla yeniləndi!");
+    } catch (err) {
+      alert("Yenilənmə xətası: " + err.message);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -199,28 +162,28 @@ export default function ProfilePage() {
   };
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
+    await logout();
     router.push("/");
   };
 
   const handleDeleteAccount = async () => {
     if (confirm("Hesabınızı silmək istədiyinizə əminsinizmi? Bu əməliyyat geri qaytarılmır!")) {
-      await supabase.from("profiles").delete().eq("id", user.id);
-      await supabase.auth.signOut();
+      await logout();
       router.push("/");
-      alert("Hesabınız silindi.");
+      alert("Hesabınızdan çıxış edildi.");
     }
   };
 
   const handleDeleteListing = async (id) => {
     if (!confirm("Bu elanı silmək istədiyinizə əminsiniz?")) return;
 
-    const { error } = await supabase.from("listings").delete().eq("id", id);
-
-    if (error) {
-      alert("Elan silinərkən xəta: " + error.message);
-    } else {
+    try {
+      const res = await fetch(`/api/listings/${id}`, { method: "DELETE" });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.message || "Silinmədi");
       setMyListings((prev) => prev.filter((item) => item.id !== id));
+    } catch (err) {
+      alert("Elan silinərkən xəta: " + err.message);
     }
   };
 

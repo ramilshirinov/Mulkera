@@ -3,23 +3,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { useApp } from "@/context/AppContext";
 
-/**
- * Bir elanın sevimlilər statusunu izləyir və dəyişdirir.
- * Supabase-də aşağıdakı kimi bir "favorites" cədvəli olduğunu güman edir:
- *
- *   create table favorites (
- *     id uuid primary key default gen_random_uuid(),
- *     user_id uuid references auth.users(id) on delete cascade,
- *     listing_id bigint references listings(id) on delete cascade,
- *     created_at timestamptz default now(),
- *     unique (user_id, listing_id)
- *   );
- *
- * Qeyd: RLS aktivdirsə, istifadəçinin öz sətirlərini oxuyub yazması üçün
- * "user_id = auth.uid()" şərtli policy-lər əlavə olunmalıdır.
- */
 export function useFavorite(listingId) {
-  const { supabase, user } = useApp();
+  const { user } = useApp();
   const [isFavorited, setIsFavorited] = useState(false);
   const [loading, setLoading] = useState(true);
   const [toggling, setToggling] = useState(false);
@@ -37,19 +22,16 @@ export function useFavorite(listingId) {
       }
 
       setLoading(true);
-      const { data, error } = await supabase
-        .from("favorites")
-        .select("id")
-        .eq("user_id", user.id)
-        .eq("listing_id", listingId)
-        .maybeSingle();
-
-      if (active) {
-        if (error) {
-          console.error("Sevimlilər yoxlanılarkən xəta:", error);
+      try {
+        const res = await fetch(`/api/listings/${listingId}/favorite?userId=${user.id}`);
+        const json = await res.json();
+        if (active) {
+          setIsFavorited(!!json.favorited);
         }
-        setIsFavorited(!!data);
-        setLoading(false);
+      } catch (err) {
+        console.error("Sevimlilər yoxlanılarkən xəta:", err);
+      } finally {
+        if (active) setLoading(false);
       }
     }
 
@@ -57,42 +39,40 @@ export function useFavorite(listingId) {
     return () => {
       active = false;
     };
-  }, [user, listingId, supabase]);
+  }, [user, listingId]);
 
   const toggleFavorite = useCallback(async () => {
     if (!user) {
-      // Çağıran tərəf bunu görüb login-ə yönləndirməlidir
       return { requiresAuth: true };
     }
     if (!listingId || toggling) return {};
 
     const previous = isFavorited;
     setToggling(true);
-    setIsFavorited(!previous); // optimistic UI
+    setIsFavorited(!previous); // Optimistic UI
 
     try {
-      if (previous) {
-        const { error } = await supabase
-          .from("favorites")
-          .delete()
-          .eq("user_id", user.id)
-          .eq("listing_id", listingId);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase
-          .from("favorites")
-          .insert({ user_id: user.id, listing_id: listingId });
-        if (error) throw error;
+      const res = await fetch(`/api/listings/${listingId}/favorite`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: user.id }),
+      });
+      const json = await res.json();
+
+      if (!res.ok || !json.success) {
+        throw new Error(json.message || "Xəta baş verdi");
       }
-      return { success: true };
+
+      setIsFavorited(!!json.favorited);
+      return { success: true, favorited: json.favorited };
     } catch (err) {
       console.error("Sevimlilərə əlavə/silmə xətası:", err);
-      setIsFavorited(previous); // xəta olarsa geri qaytar
+      setIsFavorited(previous);
       return { error: err };
     } finally {
       setToggling(false);
     }
-  }, [user, listingId, isFavorited, toggling, supabase]);
+  }, [user, listingId, isFavorited, toggling]);
 
   return { isFavorited, loading, toggling, toggleFavorite };
 }

@@ -69,63 +69,54 @@ export default function RealtorProfilePage() {
       setLoading(true);
 
       try {
-        // 1. Profil məlumatını Supabase-dən çəkirik
-        const { data: profileData, error: profileError } = await supabase
-          .from("profiles")
-          .select("*")
-          .eq("id", id)
-          .maybeSingle();
-
-        if (!profileError && profileData) {
-          setRealtor({
-            id: profileData.id,
-            full_name: profileData.full_name || "Peşəkar Rieltor",
-            agency_name: profileData.agency_name || "MÜLKERA Real Estate Agency",
-            commission_rate: profileData.commission_rate || "1-2%",
-            phone: profileData.phone || "+994 50 123 45 67",
-            email: profileData.email || "realtor@mulkera.az",
-            avatar_url: profileData.avatar_url || "",
-            is_approved: profileData.is_approved_realtor ?? true,
-            sales_count: profileData.sales_count || 24,
-            satisfaction_rate: profileData.satisfaction_rate || "99.1",
-            sales_speed_days: profileData.sales_speed_days || 9,
-            bio:
-              profileData.bio ||
-              "Daşınmaz əmlak bazarında 7 ildən artıq peşəkar təcrübə. Bakı şəhəri üzrə mənzil, villa və kommersiya obyektlərinin alqı-satqısı və kirayəsi üzrə ixtisaslaşmışam.",
-          });
-        } else {
-          // Nümunə profil
-          setRealtor({
-            id: id,
-            full_name: "Ramil Şirinov",
-            agency_name: "MÜLKERA Premium Real Estate",
-            commission_rate: "1.5%",
-            phone: "+994 50 123 45 67",
-            email: "ramil.shirinov@mulkera.az",
-            avatar_url: "",
-            is_approved: true,
-            sales_count: 32,
-            satisfaction_rate: "99.4",
-            sales_speed_days: 8,
-            bio: "Daşınmaz əmlak bazarında illərin təcrübəsi ilə müştərilərimə ən sərfəli və qanuni təminatlı əmlak sövdələşmələrini təklif edirəm.",
-          });
+        // 1. Backend API-dən rieltor və elanları çəkirik
+        const res = await fetch(`/api/realtors/${id}`);
+        if (res.ok) {
+          const json = await res.json();
+          if (json.success && json.data?.realtor) {
+            setRealtor(json.data.realtor);
+            if (json.data.listings && json.data.listings.length > 0) {
+              setListings(json.data.listings);
+            }
+            return;
+          }
         }
 
-        // 2. Bu rieltora aid elanları çəkirik
-        const { data: listingData } = await supabase
-          .from("listings")
-          .select("*, listing_photos(*), categories(*), districts(*)")
-          .or(`owner_id.eq.${id},user_id.eq.${id}`);
+        // Fallback: Supabase-dən çəkirik
+        if (supabase) {
+          const { data: profileData } = await supabase
+            .from("profiles")
+            .select("*")
+            .eq("id", id)
+            .maybeSingle();
 
-        if (listingData && listingData.length > 0) {
-          setListings(listingData);
-        } else {
-          // Əgər bazada elan tapılmadısa, aktiv elanlardan nümunə göstərək
-          const { data: sampleData } = await supabase
+          if (profileData) {
+            setRealtor({
+              id: profileData.id,
+              full_name: profileData.full_name || "Peşəkar Rieltor",
+              agency_name: profileData.agency_name || "MÜLKERA Real Estate Agency",
+              commission_rate: profileData.commission_rate || "1-2%",
+              phone: profileData.phone || "+994 50 123 45 67",
+              email: profileData.email || "realtor@mulkera.az",
+              avatar_url: profileData.avatar_url || "",
+              is_approved: profileData.is_approved_realtor ?? true,
+              sales_count: profileData.sales_count || 24,
+              satisfaction_rate: profileData.satisfaction_rate || "99.1",
+              sales_speed_days: profileData.sales_speed_days || 9,
+              bio:
+                profileData.bio ||
+                "Daşınmaz əmlak bazarında 7 ildən artıq peşəkar təcrübə. Bakı şəhəri üzrə mənzil, villa və kommersiya obyektlərinin alqı-satqısı və kirayəsi üzrə ixtisaslaşmışam.",
+            });
+          }
+
+          const { data: listingData } = await supabase
             .from("listings")
             .select("*, listing_photos(*), categories(*), districts(*)")
-            .limit(4);
-          setListings(sampleData || []);
+            .or(`owner_id.eq.${id},user_id.eq.${id}`);
+
+          if (listingData && listingData.length > 0) {
+            setListings(listingData);
+          }
         }
       } catch (err) {
         console.error("Məlumat yüklənmədi:", err);
@@ -134,18 +125,17 @@ export default function RealtorProfilePage() {
       }
     }
 
-    if (supabase) {
-      loadRealtorData();
-    }
+    loadRealtorData();
   }, [id, supabase]);
 
-  const handleAddReview = (e) => {
+  const handleAddReview = async (e) => {
     e.preventDefault();
     if (!newComment.trim()) return;
 
+    const reviewer_name = newAuthor.trim() || user?.user_metadata?.full_name || user?.email?.split("@")[0] || "Anonim Müştəri";
     const reviewObj = {
       id: Date.now(),
-      author_name: newAuthor.trim() || user?.email?.split("@")[0] || "Anonim Müştəri",
+      author_name: reviewer_name,
       rating: newRating,
       date: "İndicə",
       comment: newComment.trim(),
@@ -155,6 +145,22 @@ export default function RealtorProfilePage() {
     setNewAuthor("");
     setNewComment("");
     setReviewSubmitted(true);
+
+    try {
+      await fetch(`/api/realtors/${id}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          reviewer_name,
+          rating: newRating,
+          comment: reviewObj.comment,
+          user_id: user?.id || null,
+        }),
+      });
+    } catch (err) {
+      console.error("Rəy saxlanılarkən xəta:", err);
+    }
+
     setTimeout(() => setReviewSubmitted(false), 3000);
   };
 

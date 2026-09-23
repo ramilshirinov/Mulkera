@@ -9,7 +9,7 @@ import { FiUser, FiMail, FiLock, FiPhone, FiBriefcase, FiPercent, FiAlertCircle,
 import az from "@/lib/i18n/az";// Fallback üçün birbaşa AZ lüğətini çağırırıq
 
 export default function RegisterPage() {
-  const { dict = az, supabase } = useApp();
+  const { dict = az, register } = useApp();
   const router = useRouter();
 
   const [role, setRole] = useState("customer");
@@ -34,69 +34,23 @@ export default function RegisterPage() {
     setLoading(true);
 
     try {
-      const { data, error: signUpError } = await supabase.auth.signUp({
+      await register({
+        fullName: form.fullName,
         email: form.email,
         password: form.password,
-        options: {
-          data: {
-            full_name: form.fullName,
-            phone: form.phone,
-            role,
-          },
-        },
+        phone: form.phone,
+        role,
+        agencyName: role === "realtor" ? form.agencyName : null,
+        commissionRate: role === "realtor" ? form.commissionRate : null,
+        legalStatus: role === "realtor" ? form.legalStatus : null,
       });
 
-      if (signUpError) throw signUpError;
-
-      const userId = data.user?.id;
-
-      if (userId) {
-        try {
-          await supabase.from("profiles").upsert({
-            id: userId,
-            full_name: form.fullName,
-            phone: form.phone,
-            role,
-            agency_name: role === "realtor" ? form.agencyName : null,
-            commission_rate: role === "realtor" ? (form.commissionRate ? `${form.commissionRate}%` : "1-2%") : null,
-            is_approved_realtor: false,
-          });
-        } catch (e) {
-          console.warn("profiles table upsert error:", e);
-        }
-
-        try {
-          await supabase
-            .from("users")
-            .update({ phone: form.phone, role })
-            .eq("id", userId);
-        } catch (e) {
-          console.warn("users table update error:", e);
-        }
-
-        if (role === "realtor") {
-          try {
-            await supabase.from("realtor_profiles").insert({
-              user_id: userId,
-              agency_name: form.agencyName,
-              commission_rate: Number(form.commissionRate) || 0,
-              legal_status: form.legalStatus,
-              contact_number: form.phone,
-              approval_status: "pending",
-            });
-          } catch (e) {
-            console.warn("realtor_profiles table insert error:", e);
-          }
-        }
-      }
-
       setSuccess(true);
-      // Əgər e-poçt təsdiqi gözlənilmirsə, birbaşa profilə yönləndiririk
       setTimeout(() => {
         router.push("/profile");
-      }, 1500);
+      }, 1000);
     } catch (err) {
-      setError(err.message);
+      setError(err.message || "Qeydiyyat zamanı xəta baş verdi.");
     } finally {
       setLoading(false);
     }

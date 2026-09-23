@@ -1,15 +1,8 @@
-// FAYL YOLU: components/MediaUploader.jsx
 "use client";
 
 import { useState } from "react";
-import { useApp } from "@/context/AppContext";
 import { FiUpload, FiVideo, FiX, FiLoader } from "react-icons/fi";
 
-/**
- * Faylları Supabase Storage-a ("listings-media" bucket-i) yükləyir və
- * hər faylı { url, path, name, type } formatında files massivinə əlavə edir.
- * Props: files, setFiles, accept, type ("image" | "video"), label
- */
 export default function MediaUploader({
   files = [],
   setFiles,
@@ -17,7 +10,6 @@ export default function MediaUploader({
   type = "image",
   label,
 }) {
-  const { supabase, user } = useApp();
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
 
@@ -32,26 +24,45 @@ export default function MediaUploader({
       const uploaded = [];
 
       for (const file of selected) {
-        const fileExt = file.name.split(".").pop();
-        const safeName = `${Date.now()}-${Math.random().toString(36).slice(2)}.${fileExt}`;
-        const folder = type === "video" ? "videos" : "images";
-        const filePath = `listings/${user?.id || "guest"}/${folder}/${safeName}`;
+        // Faylı base64 DataURL-ə çeviririk və ya FormData ilə /api/upload-a göndəririk
+        try {
+          const formData = new FormData();
+          formData.append("file", file);
 
-        const { error: uploadErr } = await supabase.storage
-          .from("listings-media")
-          .upload(filePath, file, { cacheControl: "3600", upsert: false });
+          const res = await fetch("/api/upload", {
+            method: "POST",
+            body: formData,
+          });
 
-        if (uploadErr) throw uploadErr;
-
-        const { data } = supabase.storage.from("listings-media").getPublicUrl(filePath);
-
-        uploaded.push({ url: data.publicUrl, path: filePath, name: file.name, type });
+          const json = await res.json();
+          if (json.success && json.url) {
+            uploaded.push({ url: json.url, name: json.name || file.name, type });
+          } else {
+            // Fallback: FileReader data URL
+            const reader = new FileReader();
+            const dataUrl = await new Promise((resolve, reject) => {
+              reader.onload = () => resolve(reader.result);
+              reader.onerror = reject;
+              reader.readAsDataURL(file);
+            });
+            uploaded.push({ url: dataUrl, name: file.name, type });
+          }
+        } catch (innerErr) {
+          // Fallback FileReader
+          const reader = new FileReader();
+          const dataUrl = await new Promise((resolve, reject) => {
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+          });
+          uploaded.push({ url: dataUrl, name: file.name, type });
+        }
       }
 
       setFiles((prev) => [...(prev || []), ...uploaded]);
     } catch (err) {
-      console.error(err);
-      setUploadError("Fayl yüklənərkən xəta: " + (err.message || "Naməlum xəta"));
+      console.error("Yükləmə xətası:", err);
+      setUploadError("Fayl yüklənərkən xəta baş verdi.");
     } finally {
       setUploading(false);
       e.target.value = "";
@@ -72,7 +83,7 @@ export default function MediaUploader({
 
       <div className="flex flex-wrap gap-4">
         {(files || []).map((file, index) => {
-          const url = file?.url || file;
+          const url = typeof file === "string" ? file : file?.url;
           return (
             <div
               key={`${url}-${index}`}
@@ -81,14 +92,14 @@ export default function MediaUploader({
               {type === "video" ? (
                 <video src={url} className="h-full w-full object-cover" muted />
               ) : (
-                // eslint-disable-next-line @next/next/no-img-element
+                /* eslint-disable-next-line @next/next/no-img-element */
                 <img src={url} alt="Yüklənmiş fayl" className="h-full w-full object-cover" />
               )}
               <button
                 type="button"
                 onClick={() => removeFile(index)}
                 aria-label="Faylı sil"
-                className="absolute right-1 top-1 rounded-full bg-red-500 p-1 text-xs text-white transition-all hover:bg-red-600"
+                className="absolute right-1 top-1 rounded-full bg-red-500 p-1 text-xs text-white transition-all hover:bg-red-600 shadow"
               >
                 <FiX />
               </button>

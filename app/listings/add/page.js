@@ -88,7 +88,7 @@ export default function AddListingPage() {
 
   useEffect(() => {
     if (!loadingAuth && !user) {
-      router.push("/login?redirect=/add-listing");
+      router.push("/login?redirect=/listings/add");
     }
   }, [loadingAuth, user, router]);
 

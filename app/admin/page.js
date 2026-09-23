@@ -24,78 +24,44 @@ export default function AdminPage() {
     profile?.role === "admin" || 
     user?.email?.toLowerCase().includes("admin");
 
-  useEffect(() => {
-    async function loadAdminData() {
-      if (loadingAuth) return;
-      setLoading(true);
+  const loadAdminData = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/admin", { cache: "no-store" });
+      const json = await res.json();
 
-      try {
-        const [usersCount, listingsRes, realtorsRes, reportsRes] = await Promise.all([
-          supabase.from("profiles").select("*", { count: "exact", head: true }),
-          supabase.from("listings").select("*, profiles(full_name, agency_name)").order("created_at", { ascending: false }).limit(20),
-          supabase.from("profiles").select("*").eq("role", "realtor").or("is_approved_realtor.eq.false,is_approved.eq.false"),
-          supabase.from("reports").select("*, listings(title)").order("created_at", { ascending: false }).limit(20),
-        ]);
-
-        const pendingList = realtorsRes.data || [
-          {
-            id: "p1",
-            full_name: "Samir Bağırov",
-            email: "samir.bagirov@realestate.az",
-            agency_name: "Xəzər Əmlak MMC",
-            commission_rate: "1.5%",
-            phone: "+994 50 888 77 66",
-            created_at: new Date().toISOString(),
-          }
-        ];
-
-        setPendingRealtors(pendingList);
-        setAllListings(listingsRes.data || []);
-        setReports(reportsRes.data || [
-          {
-            id: "rep1",
-            listing_id: "sample-1",
-            reason: "Artıq satılıb və ya kirayə verilib",
-            details: "Elan sahibi ilə danışdım, dünən açarları təhvil veriblər.",
-            created_at: new Date().toISOString(),
-            listings: { title: "Nəsimi rayonunda 3 otaqlı yeni tikili" }
-          }
-        ]);
-
+      if (json.success) {
+        setPendingRealtors(json.pendingRealtors || []);
+        setAllListings(json.listings || []);
+        setReports(json.reports || []);
         setStats({
-          users: usersCount.count || 12,
-          listings: listingsRes.data?.length || 8,
-          pendingCount: pendingList.length,
-          reportsCount: (reportsRes.data?.length || 1),
+          users: json.stats?.users || 12,
+          listings: json.stats?.listings || (json.listings || []).length,
+          pendingCount: (json.pendingRealtors || []).length,
+          reportsCount: (json.reports || []).length,
         });
-      } catch (err) {
-        console.error("Admin məlumatı yüklənmədi:", err);
-      } finally {
-        setLoading(false);
       }
+    } catch (err) {
+      console.error("Admin məlumatı yüklənmədi:", err);
+    } finally {
+      setLoading(false);
     }
+  };
 
-    if (supabase) {
-      loadAdminData();
-    }
-  }, [user, profile, loadingAuth, supabase]);
+  useEffect(() => {
+    loadAdminData();
+  }, [loadingAuth]);
 
   // Rieltoru təsdiq etmək
   const handleApprove = async (id) => {
     try {
-      await supabase
-        .from("profiles")
-        .update({ is_approved_realtor: true, is_approved: true })
-        .eq("id", id);
-
-      try {
-        await supabase
-          .from("realtor_profiles")
-          .update({ approval_status: "approved" })
-          .eq("user_id", id);
-      } catch (e) {
-        // pass
-      }
+      const res = await fetch("/api/admin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "approve_realtor", id }),
+      });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.message || "Təsdiq olunmadı");
 
       setPendingRealtors((prev) => prev.filter((r) => r.id !== id));
       setStats((s) => ({ ...s, pendingCount: Math.max(0, s.pendingCount - 1) }));
@@ -109,19 +75,13 @@ export default function AdminPage() {
   const handleReject = async (id) => {
     if (!confirm("Bu rieltor müraciətini rədd etmək istədiyinizə əminsiniz?")) return;
     try {
-      await supabase
-        .from("profiles")
-        .update({ role: "customer", is_approved_realtor: false, is_approved: false })
-        .eq("id", id);
-
-      try {
-        await supabase
-          .from("realtor_profiles")
-          .update({ approval_status: "rejected" })
-          .eq("user_id", id);
-      } catch (e) {
-        // pass
-      }
+      const res = await fetch("/api/admin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "reject_realtor", id }),
+      });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.message || "Rədd edilmədi");
 
       setPendingRealtors((prev) => prev.filter((r) => r.id !== id));
       setStats((s) => ({ ...s, pendingCount: Math.max(0, s.pendingCount - 1) }));
@@ -133,8 +93,15 @@ export default function AdminPage() {
   // Elanı VIP etmək / VIP-dən çıxarmaq
   const handleToggleVip = async (listingId, currentVip) => {
     try {
-      const nextVip = !currentVip;
-      await supabase.from("listings").update({ is_vip: nextVip }).eq("id", listingId);
+      const res = await fetch("/api/admin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "toggle_vip", id: listingId }),
+      });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.message || "VIP statusu dəyişdirilmədi");
+
+      const nextVip = json.is_vip;
       setAllListings((prev) =>
         prev.map((item) => (item.id === listingId ? { ...item, is_vip: nextVip } : item))
       );
@@ -147,7 +114,14 @@ export default function AdminPage() {
   const handleDeleteListing = async (listingId) => {
     if (!confirm("Bu elanı bazadan tamamilə silmək istədiyinizə əminsiniz?")) return;
     try {
-      await supabase.from("listings").delete().eq("id", listingId);
+      const res = await fetch("/api/admin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "delete_listing", id: listingId }),
+      });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.message || "Silinmədi");
+
       setAllListings((prev) => prev.filter((item) => item.id !== listingId));
       setStats((s) => ({ ...s, listings: Math.max(0, s.listings - 1) }));
     } catch (err) {

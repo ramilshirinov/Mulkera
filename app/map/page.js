@@ -121,9 +121,10 @@ export default function MapPage() {
   const [roomsFilter, setRoomsFilter] = useState("all");
   const [minPrice, setMinPrice] = useState("");
   const [maxPrice, setMaxPrice] = useState("");
+  const [mapType, setMapType] = useState("standard"); // "standard" | "satellite" | "dark"
 
   // Panel və Interaksiya
-  const [panelOpen, setPanelOpen] = useState(true);
+  const [panelOpen, setPanelOpen] = useState(false);
   const [showListPanel, setShowListPanel] = useState(true);
   const [flyTarget, setFlyTarget] = useState(null);
 
@@ -313,21 +314,62 @@ export default function MapPage() {
       />
 
       {/* Üst Filter / İdarəetmə Paneli */}
-      <div className="bg-white dark:bg-slate-900 border-b border-navy/10 dark:border-slate-800 px-4 py-3 sm:px-6 flex flex-wrap items-center justify-between gap-4 z-[1001] shadow-sm">
+      <div className="bg-white dark:bg-slate-900 border-b border-navy/10 dark:border-slate-800 px-4 py-3 sm:px-6 flex flex-wrap items-center justify-between gap-3 z-30 shadow-xs">
         <div className="flex items-center gap-3">
-          <h1 className="text-lg sm:text-xl font-bold font-heading text-navy dark:text-slate-100 flex items-center gap-2">
+          <h1 className="text-base sm:text-lg font-bold font-heading text-navy dark:text-slate-100 flex items-center gap-2">
             <FiMapPin className="text-copper" /> Xəritə Üzrə Axtarış
           </h1>
           <button
             type="button"
             onClick={() => setPanelOpen((prev) => !prev)}
-            className="flex items-center gap-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 px-3 py-2 text-xs font-semibold text-navy dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 transition cursor-pointer"
+            className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold transition cursor-pointer ${
+              panelOpen
+                ? "bg-copper text-white shadow-sm"
+                : "bg-slate-100 dark:bg-slate-800 text-navy dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700"
+            }`}
           >
-            <FiFilter className="text-copper" /> {panelOpen ? "Filtrləri Gizlə" : "Filtrlər"}
+            <FiFilter /> {panelOpen ? "Filtrləri Bağla" : "Filtrlər"}
           </button>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {/* Xəritə növü (Peyk / Satellite, Standart, Qaranlıq) */}
+          <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-0.5 rounded-xl border border-navy/10 dark:border-slate-700 text-xs">
+            <button
+              type="button"
+              onClick={() => setMapType("standard")}
+              className={`px-2.5 py-1 font-bold rounded-lg transition cursor-pointer ${
+                mapType === "standard"
+                  ? "bg-white dark:bg-slate-900 text-navy dark:text-white shadow-sm"
+                  : "text-navy/60 dark:text-slate-400 hover:text-navy dark:hover:text-white"
+              }`}
+            >
+              🗺️ Standart
+            </button>
+            <button
+              type="button"
+              onClick={() => setMapType("satellite")}
+              className={`px-2.5 py-1 font-bold rounded-lg transition cursor-pointer ${
+                mapType === "satellite"
+                  ? "bg-white dark:bg-slate-900 text-navy dark:text-white shadow-sm"
+                  : "text-navy/60 dark:text-slate-400 hover:text-navy dark:hover:text-white"
+              }`}
+            >
+              🛰️ Peyk (Satellite)
+            </button>
+            <button
+              type="button"
+              onClick={() => setMapType("dark")}
+              className={`px-2.5 py-1 font-bold rounded-lg transition cursor-pointer ${
+                mapType === "dark"
+                  ? "bg-white dark:bg-slate-900 text-navy dark:text-white shadow-sm"
+                  : "text-navy/60 dark:text-slate-400 hover:text-navy dark:hover:text-white"
+              }`}
+            >
+              🌙 Qaranlıq
+            </button>
+          </div>
+
           {/* Qiymət aralığı */}
           <div className="hidden sm:flex items-center gap-1.5 bg-slate-50 dark:bg-slate-800 border border-navy/15 dark:border-slate-700 rounded-xl px-2.5 py-1.5">
             <FiDollarSign className="text-navy/40 dark:text-slate-400 text-sm shrink-0" />
@@ -352,7 +394,7 @@ export default function MapPage() {
             type="button"
             onClick={handleFindMyLocation}
             disabled={locating}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-navy dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 transition shrink-0 cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-navy dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 transition shrink-0 cursor-pointer"
           >
             <FiCrosshair /> {locating ? "Axtarılır..." : "Ətrafımı Tap"}
           </button>
@@ -360,7 +402,7 @@ export default function MapPage() {
           <button
             type="button"
             onClick={() => setShowListPanel((prev) => !prev)}
-            className={`hidden md:flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold transition shrink-0 cursor-pointer ${
+            className={`hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition shrink-0 cursor-pointer ${
               showListPanel ? "bg-navy text-white shadow-sm" : "bg-slate-100 dark:bg-slate-800 text-navy dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700"
             }`}
           >
@@ -369,12 +411,12 @@ export default function MapPage() {
         </div>
       </div>
 
-      {/* Əsas Sahə: Siyahı Paneli + Xəritə */}
+      {/* Əsas Sahə: Siyahı Paneli + Yan Filtr Paneli + Xəritə */}
       <div className="flex-1 w-full relative z-0 flex overflow-hidden">
         
-        {/* Sol Tərəfdən Açılan Geniş Filtrləmə Paneli (Satış / Kirayə, Əmlak növü, Otaq sayı) */}
+        {/* Yan Filtrləmə Paneli (Xəritənin və kartların üstünü ÖRTMÜR, səliqəli flex sütunudur) */}
         {panelOpen && (
-          <div className="absolute left-3 top-3 z-[1000] w-[360px] max-w-[calc(100%-1.5rem)] max-h-[calc(100%-1.5rem)] overflow-y-auto space-y-4 rounded-2xl bg-white/95 dark:bg-slate-900/95 p-5 shadow-2xl backdrop-blur border border-navy/10 dark:border-slate-700">
+          <div className="w-80 md:w-84 shrink-0 border-r border-navy/10 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-y-auto space-y-4 p-5 shadow-lg z-20">
             <div className="flex items-center justify-between border-b border-navy/10 dark:border-slate-800 pb-3">
               <span className="flex items-center gap-2 text-sm font-bold text-navy dark:text-slate-100 font-heading">
                 <FiFilter className="text-copper" /> Filtrlər və Axtarış
@@ -570,10 +612,26 @@ export default function MapPage() {
               scrollWheelZoom={true}
               style={{ width: "100%", height: "100%" }}
             >
-              <TileLayer
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-              />
+              {mapType === "satellite" ? (
+                <TileLayer
+                  key="satellite"
+                  attribution='Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
+                  url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+                  maxZoom={19}
+                />
+              ) : mapType === "dark" ? (
+                <TileLayer
+                  key="dark"
+                  attribution='&copy; <a href="https://carto.com/">CARTO</a>'
+                  url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+                />
+              ) : (
+                <TileLayer
+                  key="standard"
+                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                />
+              )}
 
               <MapFlyController target={flyTarget} />
 
@@ -597,17 +655,21 @@ export default function MapPage() {
                     item.image_url ||
                     PLACEHOLDER;
 
+                  const isVip = item.is_vip;
+                  const bgStyle = isVip
+                    ? "background: linear-gradient(135deg, #f59e0b, #d97706); color: #ffffff; border: 2px solid #ffffff; box-shadow: 0 4px 14px rgba(245, 158, 11, 0.6);"
+                    : item.transaction_type === "sale"
+                    ? "background: #0f172a; color: #ffffff; border: 2px solid #ffffff; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);"
+                    : "background: #059669; color: #ffffff; border: 2px solid #ffffff; box-shadow: 0 4px 12px rgba(5, 150, 105, 0.45);";
+
                   const customDivIcon = leafletModules.divIcon({
                     className: "mulkera-marker",
-                    html: `<div class="flex h-7 w-full items-center justify-center rounded-full border-2 border-white ${markerColor(
-                      item
-                    )} text-xs font-extrabold text-white shadow-lg px-2">${shortPrice(
-                      item.price,
-                      item.currency
-                    )}</div>`,
-                    iconSize: [82, 28],
-                    iconAnchor: [41, 14],
-                    popupAnchor: [0, -14],
+                    html: `<div style="${bgStyle}; display: inline-flex; align-items: center; justify-content: center; height: 30px; padding: 0 10px; border-radius: 9999px; font-weight: 800; font-size: 11px; letter-spacing: -0.02em; cursor: pointer; white-space: nowrap;">
+                      ${isVip ? '<span style="margin-right: 4px;">👑</span>' : ''}${shortPrice(item.price, item.currency)}
+                    </div>`,
+                    iconSize: [94, 30],
+                    iconAnchor: [47, 15],
+                    popupAnchor: [0, -15],
                   });
 
                   return (
