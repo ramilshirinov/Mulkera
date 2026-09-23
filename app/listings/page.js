@@ -1,531 +1,658 @@
-// FAYL YOLU: app/listings/add/page.js
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import dynamic from "next/dynamic";
+import { useEffect, useState, useMemo, Suspense } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import { useApp } from "@/context/AppContext";
-import { fetchCategories, fetchDistricts, createListing, localizedField } from "@/lib/listings";
-import MediaUploader from "@/components/MediaUploader";
-import { FiCheckCircle, FiPlusCircle, FiAlertCircle } from "react-icons/fi";
+import { fetchCategories, fetchDistricts, localizedField } from "@/lib/listings";
+import ListingCard from "@/components/ListingCard";
+import { PROPERTY_CATEGORIES } from "@/constants/categories";
+import { AZERBAIJAN_REGIONS } from "@/constants/locations";
+import {
+  FiSearch,
+  FiFilter,
+  FiMapPin,
+  FiRotateCcw,
+  FiSliders,
+  FiGrid,
+  FiChevronDown,
+} from "react-icons/fi";
 
-const LocationPicker = dynamic(() => import("@/components/LocationPicker"), {
-  ssr: false,
-  loading: () => (
-    <div className="flex h-[380px] w-full animate-pulse items-center justify-center rounded-xl bg-slate-100 text-navy/60 dark:bg-slate-800 dark:text-slate-400">
-      Xəritə yüklənir...
-    </div>
-  ),
-});
-
-const DOCUMENT_OPTIONS = ["Çıxarış", "Kupça", "Texniki pasport", "Notarial müqavilə", "Digər"];
-
-const azerbaijanRegions = [
-  { name: "Bakı", districts: ["Binəqədi", "Nəsimi", "Nizami", "Nərimanov", "Səbail", "Sabunçu", "Suraxanı", "Xətai", "Xəzər", "Pirallahı", "Yasamal", "Qaradağ", "Digər"] },
-  { name: "Sumqayıt", districts: ["1-ci mkr", "2-ci mkr", "3-cü mkr", "4-cü mkr", "5-ci mkr", "6-cı mkr", "7-ci mkr", "8-ci mkr", "9-cu mkr", "Stansiya Sumqayıt", "Corat", "Hacı Zeynalabdin", "Novxanı bağları", "İnşaatçılar", "Digər"] },
-  { name: "Abşeron", districts: ["Xırdalan", "Masazır", "Saray", "Ceyranbatan", "Güzdək", "Hökməli", "Məmmədli", "Mehdiabad", "Novxanı", "Pirəkəşkül", "Digər"] },
-  { name: "Gəncə", districts: ["Kəpəz rayonu", "Nizami rayonu", "Digər"] },
-  { name: "Şirvan", districts: ["Şirvan şəhər mərkəzi", "Hacıqəfil", "Digər"] },
-  { name: "Lənkəran", districts: ["Lənkəran şəhər mərkəzi", "Girdəh", "Kirov", "Liman", "Digər"] },
-  { name: "Mingəçevir", districts: ["Mingəçevir şəhər mərkəzi", "Ağcəbədi yolu istiqaməti", "Digər"] },
-  { name: "Naftalan", districts: ["Naftalan mərkəz", "Digər"] },
-  { name: "Şəki", districts: ["Şəki şəhər mərkəzi", "Oxut", "Kiçik Dəhnə", "Böyük Dəhnə", "Digər"] },
-  { name: "Quba", districts: ["Quba şəhər mərkəzi", "Qırmızı qəsəbə", "Nügədi", "Aşağı Tülkədar", "Digər"] },
-  { name: "Qusar", districts: ["Qusar şəhər mərkəzi", "Həzrə", "Aşağı Ləgər", "Digər"] },
-  { name: "Xaçmaz", districts: ["Xaçmaz şəhər mərkəzi", "Xudat", "Nabran", "Müxbirlər", "Digər"] },
-  { name: "Qəbələ", districts: ["Qəbələ şəhər mərkəzi", "Vəndam", "Bum", "Nic", "Digər"] },
-  { name: "İsmayıllı", districts: ["İsmayıllı şəhər mərkəzi", "Lahıc", "İvanovka", "Qoşakənd", "Digər"] },
-  { name: "Şamaxı", districts: ["Şamaxı şəhər mərkəzi", "Mədrəsə", "Çuxuryurd", "Digər"] },
-  { name: "Ağdam", districts: ["Ağdam şəhər mərkəzi", "Quzanlı", "Bənövşələr", "Digər"] },
-  { name: "Füzuli", districts: ["Füzuli şəhər mərkəzi", "Horadiz", "Aşağı Əbdürrəhmanlı", "Digər"] },
-  { name: "Zəngilan", districts: ["Zəngilan şəhər mərkəzi", "Ağbənd", "Mincivan", "Digər"] },
-  { name: "Cəbrayil", districts: ["Cəbrayil şəhər mərkəzi", "Mehdixeyli", "Digər"] },
-  { name: "Qubadlı", districts: ["Qubadlı şəhər mərkəzi", "Digər"] },
-  { name: "Laçın", districts: ["Laçın şəhər mərkəzi", "Güləbird", "Zabux", "Digər"] },
-  { name: "Kəlbəcər", districts: ["Kəlbəcər şəhər mərkəzi", "İstisu", "Digər"] },
-  { name: "Şuşa", districts: ["Şuşa şəhər mərkəzi", "Turşsu", "Digər"] },
-  { name: "Xocavənd", districts: ["Xocavənd şəhər mərkəzi", "Hadrut", "Digər"] },
-  { name: "Xocalı", districts: ["Xocalı şəhər mərkəzi", "Əsgəran", "Digər"] },
-  { name: "Digər", districts: ["Digər bölgələr"] }
-];
-
-// Qaranlıq və işıqlı rejim üçün ortaq sinif dəstləri
-const cardCls =
-  "card-surface space-y-4 rounded-2xl border border-navy/10 bg-white p-6 shadow-card dark:border-slate-700 dark:bg-slate-900 sm:p-8";
-const sectionTitleCls =
-  "border-b border-navy/10 pb-3 text-lg font-bold text-navy dark:border-slate-700 dark:text-white";
-const labelCls = "mb-2 block text-sm font-semibold text-navy dark:text-slate-200";
-const inputCls = (hasError) =>
-  `w-full rounded-xl border px-4 py-3 text-sm text-navy outline-none transition placeholder:text-navy/40 focus:border-copper dark:text-slate-100 dark:placeholder:text-slate-500 ${
-    hasError
-      ? "border-red-400 bg-red-50/40 dark:border-red-700 dark:bg-red-950/30"
-      : "border-navy/15 bg-slate-50 dark:border-slate-700 dark:bg-slate-800"
-  }`;
-
-const emptyForm = {
-  title_az: "",
-  description_az: "",
-  category_id: "",
-  selected_city: "Bakı",
-  district_name: "",
-  district_id: "",
-  transaction_type: "sale",
-  price: "",
-  currency: "AZN",
-  room_count: "",
-  area_m2: "",
-  yard_sot: "",
-  floor_number: "",
-  total_floors: "",
-  address: "",
-  // Yalnız istifadəçi xəritədə "təsdiq et" düyməsinə basanda { lat, lng } olur.
-  // Başlanğıcda null-dur ki, təsdiqsiz standart koordinat bazaya getməsin.
-  location: null,
-  phone_number: "",
-  documents: [],
-};
-
-export default function AddListingPage() {
-  const { user, profile, supabase, loadingAuth, locale } = useApp();
+function ListingsContent() {
+  const { supabase, locale, language, dict: rawDict } = useApp();
+  const dict = rawDict || {};
+  const currentLocale = locale || language || "az";
+  const searchParams = useSearchParams();
   const router = useRouter();
 
+  const [listings, setListings] = useState([]);
   const [categories, setCategories] = useState([]);
-  const [dbDistricts, setDbDistricts] = useState([]);
-  const [form, setForm] = useState(emptyForm);
-  const [imageFiles, setImageFiles] = useState([]);
-  const [videoFiles, setVideoFiles] = useState([]);
-  const [errors, setErrors] = useState({});
-  const [submitting, setSubmitting] = useState(false);
-  const [success, setSuccess] = useState(false);
+  const [districts, setDistricts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showFilters, setShowFilters] = useState(false);
 
-  const currentDistricts =
-    azerbaijanRegions.find((c) => c.name === form.selected_city)?.districts || [];
+  // Filtrlər
+  const [search, setSearch] = useState(searchParams.get("search") || "");
+  const [txType, setTxType] = useState(searchParams.get("type") || "all");
+  
+  // Əmlak növü və "Digər"
+  const [selectedCategory, setSelectedCategory] = useState(
+    searchParams.get("category") || "all"
+  );
+  const [otherCategory, setOtherCategory] = useState("");
 
+  // Dinamik Ərazi İyerarxiyası (Şəhər -> Rayon -> Qəsəbə) və "Digər"
+  const [selectedRegionId, setSelectedRegionId] = useState("all");
+  const [otherCity, setOtherCity] = useState("");
+  
+  const [selectedDistrictId, setSelectedDistrictId] = useState("all");
+  const [otherDistrict, setOtherDistrict] = useState("");
+
+  const [selectedSettlement, setSelectedSettlement] = useState("all");
+  const [otherSettlement, setOtherSettlement] = useState("");
+
+  // Digər filtrlər
+  const [rooms, setRooms] = useState(searchParams.get("rooms") || "all");
+  const [minPrice, setMinPrice] = useState(searchParams.get("min_price") || "");
+  const [maxPrice, setMaxPrice] = useState(searchParams.get("max_price") || "");
+  
+  // Torpaq sahəsi (sot) filtri
+  const [minLandSot, setMinLandSot] = useState(searchParams.get("min_sot") || "");
+  const [maxLandSot, setMaxLandSot] = useState(searchParams.get("max_sot") || "");
+
+  const [sortBy, setSortBy] = useState("newest");
+
+  // Seçilmiş region obyektini tapmaq
+  const activeRegion = useMemo(() => {
+    return AZERBAIJAN_REGIONS.find((r) => r.id === selectedRegionId) || null;
+  }, [selectedRegionId]);
+
+  // Seçilmiş rayona uyğun qəsəbələr
+  const activeDistrict = useMemo(() => {
+    if (!activeRegion) return null;
+    return activeRegion.districts.find((d) => d.id === selectedDistrictId) || null;
+  }, [activeRegion, selectedDistrictId]);
+
+  // Kateqoriya və Rayonların yüklənməsi
   useEffect(() => {
-    if (!supabase) return;
-    fetchCategories(supabase).then(setCategories).catch(() => {});
-    fetchDistricts(supabase).then(setDbDistricts).catch(() => {});
-  }, [supabase]);
+    fetch("/api/categories")
+      .then((r) => r.json())
+      .then((json) => {
+        if (json.success && json.data?.length > 0) setCategories(json.data);
+        else setCategories(PROPERTY_CATEGORIES);
+      })
+      .catch(() => setCategories(PROPERTY_CATEGORIES));
 
+    fetch("/api/districts")
+      .then((r) => r.json())
+      .then((json) => {
+        if (json.success && json.data) setDistricts(json.data);
+      })
+      .catch(() => {});
+  }, []);
+
+  // Elanların yüklənməsi
   useEffect(() => {
-    if (!loadingAuth && !user) {
-      router.push("/login?redirect=/listings/add");
-    }
-  }, [loadingAuth, user, router]);
+    let cancelled = false;
 
-  const update = (key, value) => setForm((f) => ({ ...f, [key]: value }));
+    const loadListings = async () => {
+      setLoading(true);
+      try {
+        const res = await fetch(`/api/listings?type=${txType}&sort=${sortBy}`, { cache: "no-store" });
+        if (res.ok) {
+          const json = await res.json();
+          if (!cancelled && json.data) {
+            setListings(json.data);
+            setLoading(false);
+            return;
+          }
+        }
 
-  const toggleDocument = (doc) => {
-    setForm((f) => ({
-      ...f,
-      documents: f.documents.includes(doc)
-        ? f.documents.filter((d) => d !== doc)
-        : [...f.documents, doc],
-    }));
+        // Fallback: Supabase sorğusu
+        if (supabase) {
+          let query = supabase
+            .from("listings")
+            .select("*, listing_photos(url, media_type), categories(*), districts(*)");
+
+          if (txType !== "all") {
+            if (txType === "rent") {
+              query = query.neq("transaction_type", "sale");
+            } else {
+              query = query.eq("transaction_type", txType);
+            }
+          }
+
+          if (sortBy === "price_asc") {
+            query = query.order("price", { ascending: true });
+          } else if (sortBy === "price_desc") {
+            query = query.order("price", { ascending: false });
+          } else {
+            query = query.order("is_vip", { ascending: false }).order("created_at", { ascending: false });
+          }
+
+          const { data, error } = await query;
+          if (cancelled) return;
+          if (error) {
+            console.error("Elanlar yüklənmədi:", error.message);
+          } else {
+            setListings(data || []);
+          }
+        }
+      } catch (err) {
+        console.error("Xəta baş verdi:", err);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    loadListings();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [supabase, txType, sortBy]);
+
+  // Client-side axtarış və detallı filtrləmə
+  const filteredListings = useMemo(() => {
+    return listings.filter((l) => {
+      // 1. Mətn axtarışı (başlıq və ya ünvan)
+      if (search.trim()) {
+        const term = search.toLowerCase().trim();
+        const title = (localizedField(l, "title", currentLocale) || l.title || "").toLowerCase();
+        const address = (l.address || "").toLowerCase();
+        const desc = (localizedField(l, "description", currentLocale) || l.description || "").toLowerCase();
+        if (!title.includes(term) && !address.includes(term) && !desc.includes(term)) {
+          return false;
+        }
+      }
+
+      // 2. Kateqoriya və "Digər"
+      if (selectedCategory !== "all") {
+        if (selectedCategory === "other") {
+          if (otherCategory.trim()) {
+            const oc = otherCategory.toLowerCase().trim();
+            const catName = (l.categories?.name || l.property_type || "").toLowerCase();
+            if (!catName.includes(oc)) return false;
+          }
+        } else {
+          const catMatch =
+            String(l.category_id) === selectedCategory ||
+            l.categories?.slug === selectedCategory ||
+            String(l.property_type).toLowerCase() === selectedCategory.toLowerCase();
+          if (!catMatch) return false;
+        }
+      }
+
+      // 3. Ərazi İyerarxiyası: Şəhər / Region
+      if (selectedRegionId !== "all") {
+        if (selectedRegionId === "other") {
+          if (otherCity.trim()) {
+            const cityTerm = otherCity.toLowerCase().trim();
+            const addr = (l.address || "").toLowerCase();
+            const dist = (l.districts?.name || l.district_name || "").toLowerCase();
+            if (!addr.includes(cityTerm) && !dist.includes(cityTerm)) return false;
+          }
+        } else if (activeRegion) {
+          const regionName = activeRegion.name.toLowerCase();
+          const addr = (l.address || "").toLowerCase();
+          const dist = (l.districts?.name || l.district_name || "").toLowerCase();
+          const matchesRegion = addr.includes(regionName) || dist.includes(regionName) || (selectedRegionId === "baku" && (dist.includes("rayon") || addr.includes("bakı")));
+          if (!matchesRegion) return false;
+        }
+      }
+
+      // 4. Ərazi İyerarxiyası: Rayon
+      if (selectedDistrictId !== "all") {
+        if (selectedDistrictId === "other") {
+          if (otherDistrict.trim()) {
+            const distTerm = otherDistrict.toLowerCase().trim();
+            const addr = (l.address || "").toLowerCase();
+            const dist = (l.districts?.name || l.district_name || "").toLowerCase();
+            if (!addr.includes(distTerm) && !dist.includes(distTerm)) return false;
+          }
+        } else if (activeDistrict) {
+          const dName = activeDistrict.name.toLowerCase().replace(" rayonu", "").replace(" şəhəri", "");
+          const addr = (l.address || "").toLowerCase();
+          const dist = (l.districts?.name || l.district_name || "").toLowerCase();
+          if (!addr.includes(dName) && !dist.includes(dName)) return false;
+        }
+      }
+
+      // 5. Ərazi İyerarxiyası: Qəsəbə / Mikrorayon
+      if (selectedSettlement !== "all") {
+        if (selectedSettlement === "other") {
+          if (otherSettlement.trim()) {
+            const settTerm = otherSettlement.toLowerCase().trim();
+            const addr = (l.address || "").toLowerCase();
+            if (!addr.includes(settTerm)) return false;
+          }
+        } else {
+          const settTerm = selectedSettlement.toLowerCase();
+          const addr = (l.address || "").toLowerCase();
+          if (!addr.includes(settTerm)) return false;
+        }
+      }
+
+      // 6. Otaq sayı
+      if (rooms !== "all") {
+        const rc = Number(l.room_count || l.rooms || 0);
+        if (rooms === "4+" ? rc < 4 : rc !== Number(rooms)) {
+          return false;
+        }
+      }
+
+      // 7. Qiymət aralığı
+      if (minPrice && Number(l.price) < Number(minPrice)) return false;
+      if (maxPrice && Number(l.price) > Number(maxPrice)) return false;
+
+      // 8. Torpaq sahəsi (sot və ya m2)
+      const landSot = Number(l.yard_sot || l.land_area_sot || (l.area_m2 ? l.area_m2 / 100 : 0));
+      if (minLandSot && landSot < Number(minLandSot)) return false;
+      if (maxLandSot && landSot > Number(maxLandSot)) return false;
+
+      return true;
+    });
+  }, [
+    listings,
+    search,
+    selectedCategory,
+    otherCategory,
+    selectedRegionId,
+    otherCity,
+    selectedDistrictId,
+    otherDistrict,
+    selectedSettlement,
+    otherSettlement,
+    activeRegion,
+    activeDistrict,
+    rooms,
+    minPrice,
+    maxPrice,
+    minLandSot,
+    maxLandSot,
+    currentLocale
+  ]);
+
+  const handleReset = () => {
+    setSearch("");
+    setTxType("all");
+    setSelectedCategory("all");
+    setOtherCategory("");
+    setSelectedRegionId("all");
+    setOtherCity("");
+    setSelectedDistrictId("all");
+    setOtherDistrict("");
+    setSelectedSettlement("all");
+    setOtherSettlement("");
+    setRooms("all");
+    setMinPrice("");
+    setMaxPrice("");
+    setMinLandSot("");
+    setMaxLandSot("");
+    setSortBy("newest");
   };
-
-  // LocationPicker yalnız təsdiq düyməsi basılanda ({ lat, lng }) və ya sıfırlananda (null) çağırır
-  const handleLocationChange = (loc) => {
-    update("location", loc);
-    if (loc) setErrors((prev) => ({ ...prev, location: false }));
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setErrors({});
-
-    const fieldErrors = {};
-    if (!form.title_az) fieldErrors.title_az = true;
-    if (!form.description_az) fieldErrors.description_az = true;
-    if (!form.category_id) fieldErrors.category_id = true;
-    if (!form.selected_city) fieldErrors.selected_city = true;
-    if (!form.price || Number(form.price) <= 0) fieldErrors.price = true;
-    if (!form.area_m2 || Number(form.area_m2) <= 0) fieldErrors.area_m2 = true;
-    if (!form.address) fieldErrors.address = true;
-    if (!form.phone_number) fieldErrors.phone_number = true;
-    if (imageFiles.length === 0) fieldErrors.images = true;
-    if (!form.location) fieldErrors.location = true;
-
-    if (Object.keys(fieldErrors).length > 0) {
-      setErrors(fieldErrors);
-      window.scrollTo({ top: 0, behavior: "smooth" });
-      return;
-    }
-
-    setSubmitting(true);
-    try {
-      const fullAddress = `${form.selected_city}${
-        form.district_name ? ", " + form.district_name : ""
-      }, ${form.address}`;
-
-      // Seçilmiş qəsəbənin adına görə bazadakı rayonu tapırıq; tapılmasa köhnə davranış qalır
-      const matchedDistrict = dbDistricts.find(
-        (d) => localizedField(d, "name", "az") === form.district_name
-      );
-      const districtId = form.district_id
-        ? Number(form.district_id)
-        : matchedDistrict?.id || dbDistricts[0]?.id || null;
-
-      const payload = {
-        owner_id: user.id,
-        owner_type: profile?.role === "realtor" ? "agency" : "owner",
-        title_az: form.title_az,
-        title_ru: null,
-        title_en: null,
-        description_az: form.description_az,
-        description_ru: null,
-        description_en: null,
-        category_id: form.category_id === "other" ? null : Number(form.category_id),
-        district_id: districtId,
-        transaction_type: form.transaction_type,
-        price: Number(form.price),
-        currency: form.currency,
-        room_count: form.room_count ? Number(form.room_count) : null,
-        area_m2: Number(form.area_m2),
-        yard_sot: form.yard_sot ? Number(form.yard_sot) : null,
-        floor_number: form.floor_number ? Number(form.floor_number) : null,
-        total_floors: form.total_floors ? Number(form.total_floors) : null,
-        address: fullAddress,
-        latitude: form.location.lat,
-        longitude: form.location.lng,
-        documents: form.documents,
-        phone_number: form.phone_number,
-        status: "active",
-      };
-
-      await createListing(supabase, {
-        payload,
-        photoUrls: imageFiles.map((f) => f.url || f),
-        videoUrls: videoFiles.map((f) => f.url || f),
-      });
-
-      setSuccess(true);
-      setTimeout(() => router.push("/listings"), 1500);
-    } catch (err) {
-      console.error(err);
-      if (err.fieldErrors) setErrors(err.fieldErrors);
-      alert("Xəta baş verdi: " + (err.message || "Naməlum xəta"));
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  if (loadingAuth || !user) {
-    return <div className="py-32 text-center text-navy/60 dark:text-slate-400">Yüklənir...</div>;
-  }
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6 lg:px-8">
-      <h1 className="mb-2 flex items-center gap-2 font-heading text-3xl font-bold text-navy dark:text-white">
-        <FiPlusCircle className="text-copper" /> Yeni Elan Yerləşdir
-      </h1>
-      <p className="mb-8 text-sm text-navy/65 dark:text-slate-400">
-        Zəhmət olmasa tələb olunan sahələri doldurun.
-      </p>
-
-      {success && (
-        <div className="mb-6 flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-medium text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">
-          <FiCheckCircle className="text-lg" /> Elan uğurla əlavə olundu! Səhifə yönləndirilir...
-        </div>
-      )}
-
-      {Object.values(errors).some(Boolean) && (
-        <div className="mb-6 flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
-          <FiAlertCircle className="text-lg shrink-0" /> Qırmızı ilə işarələnmiş sahələri doldurun.
-        </div>
-      )}
-
-      <form onSubmit={handleSubmit} className="space-y-8">
-        {/* Əsas məlumatlar */}
-        <section className={`${cardCls} space-y-6`}>
-          <h2 className={sectionTitleCls}>Əsas Məlumatlar</h2>
-          <div className="space-y-4">
-            <div>
-              <label className={labelCls}>Elanın Başlığı *</label>
-              <input
-                value={form.title_az}
-                onChange={(e) => update("title_az", e.target.value)}
-                placeholder="Məs: Sumqayıtda 3 otaqlı mənzil"
-                className={inputCls(errors.title_az)}
-              />
-            </div>
-            <div>
-              <label className={labelCls}>Ətraflı Məlumat *</label>
-              <textarea
-                rows={4}
-                value={form.description_az}
-                onChange={(e) => update("description_az", e.target.value)}
-                placeholder="Əmlak haqqında ətraflı məlumat..."
-                className={`${inputCls(errors.description_az)} resize-none`}
-              />
-            </div>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div>
-                <label className={labelCls}>Kateqoriya *</label>
-                <select
-                  value={form.category_id}
-                  onChange={(e) => update("category_id", e.target.value)}
-                  className={inputCls(errors.category_id)}
-                >
-                  <option value="">— Kateqoriya seçin —</option>
-                  {categories.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {localizedField(c, "name", locale || "az")}
-                    </option>
-                  ))}
-                  <option value="other">Digər</option>
-                </select>
-              </div>
-              <div>
-                <label className={labelCls}>Əməliyyat Növü *</label>
-                <select
-                  value={form.transaction_type}
-                  onChange={(e) => update("transaction_type", e.target.value)}
-                  className={inputCls(false)}
-                >
-                  <option value="sale">Satış</option>
-                  <option value="long_term_rent">Uzunmüddətli kirayə</option>
-                  <option value="daily_rent">Günlük kirayə</option>
-                  <option value="other">Digər</option>
-                </select>
-              </div>
-            </div>
+    <div className="min-h-screen bg-[#F8FAFC] dark:bg-slate-950 text-navy dark:text-slate-100 py-8 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-7xl mx-auto space-y-6">
+        {/* Səhifə Başlığı və Status */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-navy/10 dark:border-slate-800 pb-5">
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-extrabold font-heading text-navy dark:text-white">
+              Bütün Elanlar
+            </h1>
+            <p className="text-sm text-navy/60 dark:text-slate-400 mt-1 font-medium">
+              Azərbaycanın bütün şəhər, rayon və qəsəbələrində dəqiq ərazi iyerarxiyası ilə axtarış
+            </p>
           </div>
-        </section>
 
-        {/* Şəkil və video */}
-        <section className={cardCls}>
-          <h2 className={sectionTitleCls}>Şəkil və Videolar</h2>
-          <div className="space-y-5">
-            <MediaUploader
-              files={imageFiles}
-              setFiles={setImageFiles}
-              accept="image/*"
-              type="image"
-              label="Şəkil Faylları Seç (Ən azı 1 ədəd) *"
-            />
-            {errors.images && (
-              <p className="text-xs font-medium text-red-500">
-                ⚠️ Zəhmət olmasa, ən azı bir şəkil əlavə edin.
-              </p>
-            )}
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setShowFilters((prev) => !prev)}
+              className="md:hidden flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-navy/15 dark:border-slate-700 text-sm font-semibold text-navy dark:text-slate-200 shadow-sm"
+            >
+              <FiFilter className="text-copper" /> {showFilters ? "Filtrləri gizlə" : "Filtrlər"}
+            </button>
 
-            <MediaUploader
-              files={videoFiles}
-              setFiles={setVideoFiles}
-              accept="video/*"
-              type="video"
-              label="Video Faylı Seç (Könüllü)"
-            />
-          </div>
-        </section>
-
-        {/* Məkan və ünvan */}
-        <section className={cardCls}>
-          <h2 className={sectionTitleCls}>Məkan və Ünvan</h2>
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div>
-                <label className={labelCls}>Şəhər / Rayon *</label>
-                <select
-                  value={form.selected_city}
-                  onChange={(e) => {
-                    update("selected_city", e.target.value);
-                    update("district_name", "");
-                  }}
-                  className={inputCls(errors.selected_city)}
-                >
-                  {azerbaijanRegions.map((reg) => (
-                    <option key={reg.name} value={reg.name}>
-                      {reg.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className={labelCls}>Qəsəbə / Ərazi</label>
-                <select
-                  value={form.district_name}
-                  onChange={(e) => update("district_name", e.target.value)}
-                  className={inputCls(false)}
-                >
-                  <option value="">— Qəsəbə seçin —</option>
-                  {currentDistricts.map((d) => (
-                    <option key={d} value={d}>
-                      {d}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-            <div>
-              <label className={labelCls}>Dəqiq Ünvan / Küçə *</label>
-              <input
-                value={form.address}
-                onChange={(e) => update("address", e.target.value)}
-                placeholder="Məs: Sülh küçəsi, bina 42"
-                className={inputCls(errors.address)}
-              />
-            </div>
-            <div>
-              <label className={labelCls}>Xəritədə Dəqiq Yer Seçin *</label>
-              <div
-                className={`rounded-xl p-1 ${
-                  errors.location ? "ring-2 ring-red-400 dark:ring-red-700" : ""
-                }`}
+            <div className="flex items-center gap-2 bg-white dark:bg-slate-900 border border-navy/15 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-semibold">
+              <span className="text-navy/50 dark:text-slate-400">Sırala:</span>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                className="bg-transparent outline-none text-navy dark:text-slate-100 font-bold cursor-pointer"
               >
-                <LocationPicker value={form.location} onChange={handleLocationChange} />
+                <option value="newest" className="bg-white dark:bg-slate-900">Ən yeni elanlar</option>
+                <option value="price_asc" className="bg-white dark:bg-slate-900">Qiymət: Ucuzdan bahaya</option>
+                <option value="price_desc" className="bg-white dark:bg-slate-900">Qiymət: Bahadan ucuza</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        {/* Əsas Genişləndirilmiş Filtr Paneli */}
+        <div
+          className={`bg-white dark:bg-slate-900 rounded-2xl p-5 sm:p-6 shadow-card border border-navy/10 dark:border-slate-800 space-y-5 ${
+            showFilters ? "block" : "hidden md:block"
+          }`}
+        >
+          {/* 1-ci Sıra: Açar söz, Əməliyyat və Əmlak növü */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {/* Axtarış sahəsi */}
+            <div className="relative">
+              <label className="block text-xs font-bold text-navy/70 dark:text-slate-300 mb-1.5">
+                Açar Söz və ya Ünvan
+              </label>
+              <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-navy/15 dark:border-slate-700">
+                <FiSearch className="text-copper shrink-0" />
+                <input
+                  type="text"
+                  placeholder="Məsələn: 28 May, dəniz mənzərəsi, həyət evi..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="w-full bg-transparent text-xs outline-none text-navy dark:text-slate-100 placeholder:text-navy/40 dark:placeholder:text-slate-500 font-medium"
+                />
               </div>
-              {errors.location && (
-                <p className="mt-2 text-xs font-medium text-red-500">
-                  ⚠️ Xəritədə yeri seçin və “Bu yeri təsdiq et” düyməsinə basın.
-                </p>
+            </div>
+
+            {/* Əməliyyat növü */}
+            <div>
+              <label className="block text-xs font-bold text-navy/70 dark:text-slate-300 mb-1.5">
+                Əməliyyat Növü
+              </label>
+              <select
+                value={txType}
+                onChange={(e) => setTxType(e.target.value)}
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-navy/15 dark:border-slate-700 text-xs text-navy dark:text-slate-100 outline-none font-semibold cursor-pointer"
+              >
+                <option value="all">Hamısı (Satış və Kirayə)</option>
+                <option value="sale">Satış</option>
+                <option value="rent">Kirayə</option>
+                <option value="daily">Günlük</option>
+              </select>
+            </div>
+
+            {/* Əmlak növü (Digər variantı ilə) */}
+            <div>
+              <label className="block text-xs font-bold text-navy/70 dark:text-slate-300 mb-1.5">
+                Əmlak Növü
+              </label>
+              <select
+                value={selectedCategory}
+                onChange={(e) => setSelectedCategory(e.target.value)}
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-navy/15 dark:border-slate-700 text-xs text-navy dark:text-slate-100 outline-none font-semibold cursor-pointer"
+              >
+                <option value="all">Bütün Əmlak Növləri</option>
+                {categories.map((c) => (
+                  <option key={c.id} value={String(c.id)}>
+                    {localizedField(c, "name", currentLocale) || c.name || c.name_az}
+                  </option>
+                ))}
+                <option value="other">✍️ Digər (Əl ilə daxil et)</option>
+              </select>
+
+              {selectedCategory === "other" && (
+                <input
+                  type="text"
+                  placeholder="Məsələn: Mansard, Dupleks, Anbar..."
+                  value={otherCategory}
+                  onChange={(e) => setOtherCategory(e.target.value)}
+                  className="mt-2 w-full px-3 py-2 rounded-xl bg-amber-50/50 dark:bg-amber-950/20 border border-amber-500/40 text-xs text-navy dark:text-slate-100 outline-none placeholder:text-navy/40"
+                />
               )}
             </div>
           </div>
-        </section>
 
-        {/* Parametrlər */}
-        <section className={cardCls}>
-          <h2 className={sectionTitleCls}>Əmlakın Parametrləri</h2>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <div>
-              <label className={labelCls}>Qiymət *</label>
-              <input
-                type="number"
-                min="0"
-                max="999999999"
-                placeholder="150000"
-                value={form.price}
-                onChange={(e) => {
-                  if (e.target.value.length <= 10) update("price", e.target.value);
-                }}
-                className={inputCls(errors.price)}
-              />
-            </div>
-            <div>
-              <label className={labelCls}>Valyuta</label>
-              <select
-                value={form.currency}
-                onChange={(e) => update("currency", e.target.value)}
-                className={inputCls(false)}
-              >
-                <option value="AZN">AZN (₼)</option>
-                <option value="USD">USD ($)</option>
-                <option value="EUR">EUR (€)</option>
-              </select>
-            </div>
-            <div>
-              <label className={labelCls}>Sahə (m²) *</label>
-              <input
-                type="number"
-                min="0"
-                max="999999"
-                placeholder="85"
-                value={form.area_m2}
-                onChange={(e) => {
-                  if (e.target.value.length <= 7) update("area_m2", e.target.value);
-                }}
-                className={inputCls(errors.area_m2)}
-              />
-            </div>
-            <div>
-              <label className={labelCls}>Otaq sayı</label>
-              <input
-                type="number"
-                min="0"
-                max="99"
-                placeholder="3"
-                value={form.room_count}
-                onChange={(e) => {
-                  if (e.target.value.length <= 2) update("room_count", e.target.value);
-                }}
-                className={inputCls(false)}
-              />
-            </div>
-            <div>
-              <label className={labelCls}>Həyət sahəsi (sot)</label>
-              <input
-                type="number"
-                min="0"
-                max="9999"
-                placeholder="2"
-                value={form.yard_sot}
-                onChange={(e) => {
-                  if (e.target.value.length <= 4) update("yard_sot", e.target.value);
-                }}
-                className={inputCls(false)}
-              />
-            </div>
-            <div>
-              <label className={labelCls}>Mərtəbə</label>
-              <input
-                type="number"
-                min="0"
-                max="999"
-                placeholder="2"
-                value={form.floor_number}
-                onChange={(e) => {
-                  if (e.target.value.length <= 3) update("floor_number", e.target.value);
-                }}
-                className={inputCls(false)}
-              />
-            </div>
-            <div>
-              <label className={labelCls}>Binanın ümumi mərtəbəsi</label>
-              <input
-                type="number"
-                min="0"
-                max="999"
-                placeholder="16"
-                value={form.total_floors}
-                onChange={(e) => {
-                  if (e.target.value.length <= 3) update("total_floors", e.target.value);
-                }}
-                className={inputCls(false)}
-              />
-            </div>
-            <div className="sm:col-span-2">
-              <label className={labelCls}>Əlaqə Nömrəsi *</label>
-              <input
-                type="text"
-                value={form.phone_number}
-                onChange={(e) => update("phone_number", e.target.value)}
-                placeholder="+994 50 123 45 67"
-                className={inputCls(errors.phone_number)}
-              />
-            </div>
-          </div>
+          {/* 2-ci Sıra: Tam Dinamik Ərazi İyerarxiyası (Şəhər / Region -> Rayon -> Qəsəbə / Ərazi) */}
+          <div className="pt-3 border-t border-navy/5 dark:border-slate-800 space-y-2">
+            <span className="text-[11px] font-bold text-copper uppercase tracking-wider block">
+              📍 Dəqiq Ərazi İyerarxiyası
+            </span>
 
-          <div className="mt-4">
-            <label className={labelCls}>Sənədlər</label>
-            <div className="flex flex-wrap gap-2">
-              {DOCUMENT_OPTIONS.map((doc) => (
-                <button
-                  key={doc}
-                  type="button"
-                  onClick={() => toggleDocument(doc)}
-                  className={`rounded-xl border px-4 py-2 text-xs font-semibold transition ${
-                    form.documents.includes(doc)
-                      ? "border-copper bg-copper/10 text-copper"
-                      : "border-navy/15 text-navy/60 hover:border-copper/50 dark:border-slate-600 dark:text-slate-300"
-                  }`}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {/* 1. Şəhər / Region */}
+              <div>
+                <label className="block text-xs font-bold text-navy/70 dark:text-slate-300 mb-1.5">
+                  1. Şəhər / Bölgə
+                </label>
+                <select
+                  value={selectedRegionId}
+                  onChange={(e) => {
+                    setSelectedRegionId(e.target.value);
+                    setSelectedDistrictId("all");
+                    setSelectedSettlement("all");
+                  }}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-navy/15 dark:border-slate-700 text-xs text-navy dark:text-slate-100 outline-none font-semibold cursor-pointer"
                 >
-                  {doc}
-                </button>
-              ))}
+                  <option value="all">Bütün Azərbaycan</option>
+                  {AZERBAIJAN_REGIONS.map((reg) => (
+                    <option key={reg.id} value={reg.id}>
+                      {reg.name}
+                    </option>
+                  ))}
+                  <option value="other">✍️ Digər Şəhər / Bölgə</option>
+                </select>
+
+                {selectedRegionId === "other" && (
+                  <input
+                    type="text"
+                    placeholder="Şəhəri və ya bölgəni qeyd edin..."
+                    value={otherCity}
+                    onChange={(e) => setOtherCity(e.target.value)}
+                    className="mt-2 w-full px-3 py-2 rounded-xl bg-amber-50/50 dark:bg-amber-950/20 border border-amber-500/40 text-xs text-navy dark:text-slate-100 outline-none placeholder:text-navy/40"
+                  />
+                )}
+              </div>
+
+              {/* 2. Rayon */}
+              <div>
+                <label className="block text-xs font-bold text-navy/70 dark:text-slate-300 mb-1.5">
+                  2. Rayon
+                </label>
+                <select
+                  value={selectedDistrictId}
+                  onChange={(e) => {
+                    setSelectedDistrictId(e.target.value);
+                    setSelectedSettlement("all");
+                  }}
+                  disabled={selectedRegionId === "other"}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-navy/15 dark:border-slate-700 text-xs text-navy dark:text-slate-100 outline-none font-semibold cursor-pointer disabled:opacity-50"
+                >
+                  <option value="all">
+                    {activeRegion ? `Bütün ${activeRegion.name} rayonları` : "Bütün Rayonlar"}
+                  </option>
+                  {activeRegion?.districts.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.name}
+                    </option>
+                  ))}
+                  <option value="other">✍️ Digər Rayon</option>
+                </select>
+
+                {selectedDistrictId === "other" && (
+                  <input
+                    type="text"
+                    placeholder="Rayon adını qeyd edin..."
+                    value={otherDistrict}
+                    onChange={(e) => setOtherDistrict(e.target.value)}
+                    className="mt-2 w-full px-3 py-2 rounded-xl bg-amber-50/50 dark:bg-amber-950/20 border border-amber-500/40 text-xs text-navy dark:text-slate-100 outline-none placeholder:text-navy/40"
+                  />
+                )}
+              </div>
+
+              {/* 3. Qəsəbə / Mikrorayon / Metro */}
+              <div>
+                <label className="block text-xs font-bold text-navy/70 dark:text-slate-300 mb-1.5">
+                  3. Qəsəbə / Mikrorayon / Metro
+                </label>
+                <select
+                  value={selectedSettlement}
+                  onChange={(e) => setSelectedSettlement(e.target.value)}
+                  disabled={!activeDistrict}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-navy/15 dark:border-slate-700 text-xs text-navy dark:text-slate-100 outline-none font-semibold cursor-pointer disabled:opacity-50"
+                >
+                  <option value="all">
+                    {activeDistrict ? `Bütün ${activeDistrict.name} qəsəbələri` : "Əvvəlcə rayon seçin"}
+                  </option>
+                  {activeDistrict?.settlements?.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                  <option value="other">✍️ Digər Qəsəbə / Ərazi</option>
+                </select>
+
+                {selectedSettlement === "other" && (
+                  <input
+                    type="text"
+                    placeholder="Qəsəbə və ya massiv adını qeyd edin..."
+                    value={otherSettlement}
+                    onChange={(e) => setOtherSettlement(e.target.value)}
+                    className="mt-2 w-full px-3 py-2 rounded-xl bg-amber-50/50 dark:bg-amber-950/20 border border-amber-500/40 text-xs text-navy dark:text-slate-100 outline-none placeholder:text-navy/40"
+                  />
+                )}
+              </div>
             </div>
           </div>
-        </section>
 
-        <button
-          type="submit"
-          disabled={submitting}
-          className="w-full cursor-pointer rounded-xl bg-navy px-4 py-4 text-base font-bold text-white shadow-sm transition hover:bg-copper disabled:opacity-50 dark:bg-copper dark:hover:bg-gold-500"
-        >
-          {submitting ? "Yerləşdirilir..." : "Elanı Təsdiq Et və Paylaş"}
-        </button>
-      </form>
+          {/* 3-cü Sıra: Otaq sayı, Qiymət aralığı və Torpaq sahəsi (sot) */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-3 border-t border-navy/5 dark:border-slate-800">
+            {/* Otaq sayı */}
+            <div>
+              <label className="block text-xs font-bold text-navy/70 dark:text-slate-300 mb-1.5">
+                Otaq Sayı
+              </label>
+              <div className="flex gap-1.5">
+                {["all", "1", "2", "3", "4+"].map((r) => (
+                  <button
+                    key={r}
+                    type="button"
+                    onClick={() => setRooms(r)}
+                    className={`flex-1 py-1.5 rounded-lg text-xs font-semibold text-center border transition cursor-pointer ${
+                      rooms === r
+                        ? "bg-navy text-white border-navy dark:bg-copper dark:border-copper"
+                        : "bg-slate-50 dark:bg-slate-800 text-navy dark:text-slate-200 border-navy/10 dark:border-slate-700 hover:border-copper"
+                    }`}
+                  >
+                    {r === "all" ? "Hər" : r}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Qiymət aralığı */}
+            <div>
+              <label className="block text-xs font-bold text-navy/70 dark:text-slate-300 mb-1.5">
+                Qiymət Aralığı (AZN)
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  placeholder="Min"
+                  value={minPrice}
+                  onChange={(e) => setMinPrice(e.target.value)}
+                  className="w-1/2 px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-navy/15 dark:border-slate-700 text-xs text-navy dark:text-slate-100 outline-none"
+                />
+                <span className="text-navy/30 dark:text-slate-500 text-xs">-</span>
+                <input
+                  type="number"
+                  placeholder="Max"
+                  value={maxPrice}
+                  onChange={(e) => setMaxPrice(e.target.value)}
+                  className="w-1/2 px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-navy/15 dark:border-slate-700 text-xs text-navy dark:text-slate-100 outline-none"
+                />
+              </div>
+            </div>
+
+            {/* Torpaq sahəsi (sot) filtri */}
+            <div>
+              <label className="block text-xs font-bold text-navy/70 dark:text-slate-300 mb-1.5">
+                Həyət / Torpaq Sahəsi (Sot)
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  step="0.5"
+                  placeholder="Min sot"
+                  value={minLandSot}
+                  onChange={(e) => setMinLandSot(e.target.value)}
+                  className="w-1/2 px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-navy/15 dark:border-slate-700 text-xs text-navy dark:text-slate-100 outline-none"
+                />
+                <span className="text-navy/30 dark:text-slate-500 text-xs">-</span>
+                <input
+                  type="number"
+                  step="0.5"
+                  placeholder="Max sot"
+                  value={maxLandSot}
+                  onChange={(e) => setMaxLandSot(e.target.value)}
+                  className="w-1/2 px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-navy/15 dark:border-slate-700 text-xs text-navy dark:text-slate-100 outline-none"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Əməliyyat və Sıfırlama Paneli */}
+          <div className="flex items-center justify-between pt-2 border-t border-navy/5 dark:border-slate-800">
+            <span className="text-xs font-bold text-navy/80 dark:text-slate-300">
+              Tapıldı: <strong className="text-copper text-sm">{filteredListings.length}</strong> aktual elan
+            </span>
+
+            <button
+              type="button"
+              onClick={handleReset}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-xl border border-navy/15 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-semibold text-navy dark:text-slate-200 hover:border-copper hover:text-copper transition cursor-pointer"
+            >
+              <FiRotateCcw /> Filtrləri Sıfırla
+            </button>
+          </div>
+        </div>
+
+        {/* Elanlar Qriqi */}
+        {loading ? (
+          <div className="py-20 text-center space-y-3">
+            <div className="w-10 h-10 border-4 border-copper border-t-transparent rounded-full animate-spin mx-auto" />
+            <p className="text-sm font-semibold text-navy/60 dark:text-slate-400">
+              Elanlar yüklənir...
+            </p>
+          </div>
+        ) : filteredListings.length === 0 ? (
+          <div className="bg-white dark:bg-slate-900 rounded-2xl p-12 text-center border border-navy/10 dark:border-slate-800 shadow-sm max-w-md mx-auto space-y-4">
+            <FiSearch className="text-4xl text-copper/60 mx-auto" />
+            <h3 className="text-lg font-bold text-navy dark:text-white">
+              Axtarışınıza uyğun elan tapılmadı
+            </h3>
+            <p className="text-xs text-navy/60 dark:text-slate-400">
+              Filtrləri dəyişərək və ya sıfırlayaraq yenidən cəhd edə bilərsiniz.
+            </p>
+            <button
+              type="button"
+              onClick={handleReset}
+              className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-navy text-white hover:bg-copper text-xs font-bold transition shadow-sm cursor-pointer"
+            >
+              <FiRotateCcw /> Bütün Filtrləri Sıfırla
+            </button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredListings.map((listing) => (
+              <ListingCard key={listing.id} listing={listing} />
+            ))}
+          </div>
+        )}
+      </div>
     </div>
+  );
+}
+
+export default function ListingsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-[#F8FAFC] dark:bg-slate-950">
+          <div className="w-10 h-10 border-4 border-copper border-t-transparent rounded-full animate-spin" />
+        </div>
+      }
+    >
+      <ListingsContent />
+    </Suspense>
   );
 }
